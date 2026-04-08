@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>OmegaHRV</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg: #0d1117;
+            --card: #161b22;
+            --accent: #00c9b1;
+            --accent-dim: rgba(0, 201, 177, 0.2);
+            --text-main: #c9d1d9;
+            --text-muted: #8b949e;
+            --border: #30363d;
+            --danger: #ff7b72;
+            --warning: #d29922;
+            --success: #238636;
+        }
+
+        body.light-mode {
+            --bg: #f6f8fa;
+            --card: #ffffff;
+            --text-main: #24292f;
+            --text-muted: #57606a;
+            --border: #d0d7de;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
+        
+        body {
+            background-color: var(--bg);
+            color: var(--text-main);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden;
+            transition: background-color 0.3s;
+        }
+
+        /* Header */
+        header {
+            padding: env(safe-area-inset-top, 20px) 20px 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+            background: var(--bg);
+            z-index: 10;
+        }
+
+        .logo-svg { width: 28px; height: 28px; color: var(--accent); }
+        .app-title { font-weight: 600; font-size: 1.1rem; letter-spacing: -0.5px; }
+
+        /* Main View Container (Grid overlapping) */
+        .view-container {
+            flex: 1;
+            display: grid;
+            overflow: hidden;
+        }
+
+        .view {
+            grid-area: 1 / 1;
+            overflow-y: auto;
+            padding: 20px;
+            padding-bottom: env(safe-area-inset-bottom, 20px);
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s ease, visibility 0.2s ease;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .view.active {
+            opacity: 1;
+            visibility: visible;
+            pointer-events: auto;
+        }
+
+        /* Buttons & Inputs */
+        button {
+            background: var(--card);
+            color: var(--text-main);
+            border: 1px solid var(--border);
+            padding: 14px;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 44px;
+        }
+        button.primary {
+            background: var(--accent);
+            color: #000;
+            border-color: var(--accent);
+        }
+        button:active { transform: scale(0.98); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        input, select {
+            width: 100%;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 14px;
+            border-radius: 8px;
+            font-size: 1rem;
+            outline: none;
+            min-height: 44px;
+        }
+        input:focus, select:focus { border-color: var(--accent); }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .card-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* Dashboard specific */
+        .empty-state {
+            flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; text-align: center;
+        }
+        .pulse-circle {
+            width: 60px; height: 60px; border-radius: 50%;
+            background: var(--accent-dim);
+            box-shadow: 0 0 0 0 rgba(0, 201, 177, 0.4);
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 201, 177, 0.4); }
+            70% { transform: scale(1); box-shadow: 0 0 0 20px rgba(0, 201, 177, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 201, 177, 0); }
+        }
+
+        .readiness-ring {
+            width: 140px; height: 140px; border-radius: 50%;
+            margin: 0 auto 10px;
+            display: flex; align-items: center; justify-content: center; flex-direction: column;
+            border: 6px solid var(--border);
+        }
+        .readiness-ring strong { font-size: 2.5rem; font-weight: 600; line-height: 1; }
+        .readiness-ring span { font-size: 0.85rem; color: var(--text-muted); }
+        
+        .status-green { color: var(--success); border-color: var(--success) !important; }
+        .status-amber { color: var(--warning); border-color: var(--warning) !important; }
+        .status-red { color: var(--danger); border-color: var(--danger) !important; }
+
+        .badge {
+            padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;
+        }
+        .bg-green { background: rgba(35, 134, 54, 0.2); color: var(--success); }
+        .bg-amber { background: rgba(210, 153, 34, 0.2); color: var(--warning); }
+        .bg-red { background: rgba(255, 123, 114, 0.2); color: var(--danger); }
+
+        .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+        /* Measure specific */
+        .measure-active { display: none; flex-direction: column; align-items: center; gap: 20px; flex: 1; justify-content: center; }
+        .measure-ring { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 220px; height: 220px; border-radius: 50%; border: 6px solid transparent; transition: border-color 0.4s ease, background-color 0.2s ease; }
+        .ring-init { border-color: var(--border); box-shadow: 0 0 0 0 rgba(139, 148, 158, 0.4); animation: pulse-init 2s infinite; }
+        .ring-measure { border-color: var(--accent); box-shadow: 0 0 0 0 rgba(0, 201, 177, 0.4); animation: pulse-measure 2s infinite; }
+        .ring-flash { background-color: #fff; border-color: #fff !important; box-shadow: none; animation: none; transition: background-color 0.1s; }
+        @keyframes pulse-init { 0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(139, 148, 158, 0.2); } 70% { transform: scale(1); box-shadow: 0 0 0 20px rgba(139, 148, 158, 0); } 100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(139, 148, 158, 0); } }
+        @keyframes pulse-measure { 0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 201, 177, 0.4); } 70% { transform: scale(1); box-shadow: 0 0 0 20px rgba(0, 201, 177, 0); } 100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 201, 177, 0); } }
+        .live-hr { font-size: 4rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+        .live-timer { font-size: 1.5rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+        .measure-status { text-align: center; color: var(--text-muted); font-size: 0.9rem; margin-top: 10px; }
+        
+        /* History specific */
+        .history-item { padding: 12px 0; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+        .history-item:last-child { border-bottom: none; }
+        .history-item .date { font-size: 0.9rem; color: var(--text-main); }
+        .history-item .metrics { font-size: 0.85rem; color: var(--text-muted); display: flex; gap: 10px; align-items: center; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+        /* Chart container */
+        .chart-container { position: relative; height: 200px; width: 100%; }
+
+        /* Bottom Nav */
+        nav {
+            display: flex;
+            background: var(--card);
+            border-top: 1px solid var(--border);
+            padding-bottom: env(safe-area-inset-bottom, 0px);
+            z-index: 10;
+        }
+        .nav-item {
+            flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
+            padding: 12px 0; color: var(--text-muted); cursor: pointer; text-decoration: none;
+            font-size: 0.75rem; transition: color 0.2s;
+            min-height: 44px; /* touch target */
+        }
+        .nav-item.active { color: var(--accent); }
+        .nav-item svg { width: 22px; height: 22px; fill: currentColor; }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.8); z-index: 100;
+            display: flex; align-items: center; justify-content: center;
+            opacity: 0; visibility: hidden; transition: opacity 0.3s;
+        }
+        .modal-overlay.active { opacity: 1; visibility: visible; }
+        .modal-card {
+            background: var(--bg); padding: 24px; border-radius: 20px; width: 90%; max-width: 400px;
+            display: flex; flex-direction: column; gap: 16px; border: 1px solid var(--border);
+        }
+
+        /* Banner */
+        .banner {
+            position: fixed; top: env(safe-area-inset-top, 20px); left: 20px; right: 20px;
+            background: var(--danger); color: #fff; padding: 12px; border-radius: 8px;
+            font-size: 0.9rem; z-index: 200; text-align: center;
+            transform: translateY(-150%); transition: transform 0.3s;
+        }
+        .banner.show { transform: translateY(0); }
+
+    </style>
+</head>
+<body>
+
+    <header>
+        <svg class="logo-svg" viewBox="0 0 24 24">
+            <path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35zm-2.8-11.85l-1.6 3.2-1.9-1.9-1.4 1.4 3.3 3.3 3-6z" />
+        </svg>
+        <span class="app-title">OmegaHRV</span>
+    </header>
+
+    <div class="banner" id="disconn-banner">Sensor disconnected. Reconnecting...</div>
+
+    <div class="view-container">
+        
+        <!-- DASHBOARD -->
+        <div class="view active" id="view-dashboard">
+            <div id="dash-empty" class="empty-state">
+                <div class="pulse-circle"></div>
+                <div>
+                    <h3 style="margin-bottom: 8px;">No measurement yet today</h3>
+                    <p style="color: var(--text-muted); font-size: 0.9rem;">Tap the Measure tab to take your daily reading.</p>
+                </div>
+            </div>
+            <div id="dash-filled" style="display: none; flex-direction: column; gap: 20px;">
+                <div class="card" style="text-align: center; padding-top: 24px;">
+                    <div id="dash-ring" class="readiness-ring">
+                        <strong id="dash-score">0</strong>
+                        <span>Score</span>
+                    </div>
+                    <h3 id="dash-subtitle">Readiness</h3>
+                </div>
+                <div class="stat-grid">
+                    <div class="card">
+                        <span style="font-size: 0.8rem; color:var(--text-muted)">RMSSD</span>
+                        <div class="card-row">
+                            <strong style="font-size: 1.2rem;" id="dash-rmssd">0 ms</strong>
+                            <span id="dash-rmssd-badge" class="badge"></span>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <span style="font-size: 0.8rem; color:var(--text-muted)">Mean HR</span>
+                        <strong style="font-size: 1.2rem;" id="dash-hr">0 bpm</strong>
+                    </div>
+                    <div class="card" style="grid-column: span 2;">
+                        <span style="font-size: 0.8rem; color:var(--text-muted)">Stress Index (Baevsky)</span>
+                        <strong style="font-size: 1.2rem;" id="dash-si">0</strong>
+                    </div>
+                </div>
+                <!-- 7 day sparkline -->
+                <div class="card">
+                    <span style="font-size: 0.8rem; color:var(--text-muted)">7-Day RMSSD</span>
+                    <div class="chart-container" style="height: 120px;">
+                        <canvas id="sparklineChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MEASURE -->
+        <div class="view" id="view-measure">
+            <div id="measure-setup" class="card" style="align-items: center; text-align: center; padding: 30px 20px;">
+                <svg viewBox="0 0 24 24" style="width: 48px; height: 48px; fill: var(--text-muted); margin-bottom: 10px;"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.31-8.86c-1.77-.45-2.34-.94-2.34-1.67 0-.84.79-1.43 2.1-1.43 1.38 0 1.9.66 1.94 1.64h1.71c-.05-1.34-.87-2.57-2.49-2.97V5H10.9v1.69c-1.51.32-2.72 1.3-2.72 2.81 0 1.79 1.49 2.69 3.66 3.21 1.95.46 2.34 1.15 2.34 1.87 0 .53-.39 1.64-2.25 1.64-1.74 0-2.1-.96-2.15-1.92H8.03c.06 1.71 1.22 2.92 2.87 3.27V19h2.36v-1.64c1.83-.34 2.92-1.46 2.92-3.03 0-2.16-1.55-2.82-3.87-3.35z"/></svg>
+                <h3 style="margin-bottom: 8px;">Connect Sensor</h3>
+                <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px;">Put on your chest strap, wet the electrodes, and ensure the module is attached until the LED blinks blue.</p>
+                
+                <p id="ble-unsupported" style="display: none; color: var(--warning); font-size: 0.8rem; margin-bottom: 15px;">
+                    Web Bluetooth is not supported in this browser. Please use Bluefy on iOS or Chrome on desktop.
+                </p>
+
+                <button class="primary" id="btn-connect" onclick="startMeasurement()">Connect Sensor</button>
+            </div>
+
+            <div id="measure-active" class="measure-active">
+                <div class="measure-ring" id="timer-ring">
+                    <div class="live-hr" id="live-hr-val">--</div>
+                    <div style="color: var(--text-muted); font-size: 0.9rem; margin-top: -10px;">BPM</div>
+                    <div class="live-timer" id="live-timer-val">03:00</div>
+                </div>
+                <div class="measure-status" id="live-status-val">Waiting for RR intervals...</div>
+                <button id="btn-cancel" onclick="cancelMeasurement()" style="margin-top: 20px; max-width: 200px;">Cancel</button>
+            </div>
+            
+            <div id="measure-result" style="display: none; flex-direction: column; gap: 16px;">
+                <h3 style="text-align: center; margin-bottom: 10px;">Results</h3>
+                <div class="stat-grid">
+                    <div class="card">
+                        <span style="font-size: 0.8rem; color:var(--text-muted)">RMSSD</span>
+                        <strong style="font-size: 1.2rem;" id="res-rmssd">0 ms</strong>
+                    </div>
+                    <div class="card">
+                        <span style="font-size: 0.8rem; color:var(--text-muted)">Stress Index</span>
+                        <strong style="font-size: 1.2rem;" id="res-si">0</strong>
+                    </div>
+                     <div class="card">
+                        <span style="font-size: 0.8rem; color:var(--text-muted)">SDNN</span>
+                        <strong style="font-size: 1.2rem;" id="res-sdnn">0 ms</strong>
+                    </div>
+                    <div class="card">
+                        <span style="font-size: 0.8rem; color:var(--text-muted)">pNN50</span>
+                        <strong style="font-size: 1.2rem;" id="res-pnn50">0 %</strong>
+                    </div>
+                </div>
+                <p style="font-size: 0.9rem; color: var(--text-muted); text-align: center; margin-top: 10px;" id="res-desc"></p>
+                <button class="primary" onclick="saveMeasurement()">Save Measurement</button>
+                <button onclick="discardMeasurement()">Discard</button>
+            </div>
+        </div>
+
+        <!-- HISTORY -->
+        <div class="view" id="view-history">
+            <h2 style="font-size: 1.2rem;">30-Day History</h2>
+            <div class="card">
+                <div class="chart-container">
+                    <canvas id="historyChart"></canvas>
+                </div>
+            </div>
+            <div class="card" id="history-list" style="flex: 1; overflow-y: auto;">
+                <!-- list items injected here -->
+            </div>
+        </div>
+
+        <!-- SETTINGS -->
+        <div class="view" id="view-settings">
+            <h2 style="font-size: 1.2rem;">Settings</h2>
+            <div class="card">
+                <label style="font-size: 0.85rem; color: var(--text-muted);">Athlete Name</label>
+                <input type="text" id="set-name" placeholder="Name">
+                
+                <label style="font-size: 0.85rem; color: var(--text-muted); margin-top: 10px;">Age</label>
+                <input type="number" id="set-age" placeholder="Age">
+
+                <label style="font-size: 0.85rem; color: var(--text-muted); margin-top: 10px;">Initialisation Phase</label>
+                <select id="set-init-duration">
+                    <option value="0">Off (0s)</option>
+                    <option value="30">30 Seconds</option>
+                    <option value="60" selected>60 Seconds</option>
+                </select>
+
+                <label style="font-size: 0.85rem; color: var(--text-muted); margin-top: 10px;">Measurement Duration</label>
+                <select id="set-duration">
+                    <option value="60">1 Minute</option>
+                    <option value="120">2 Minutes</option>
+                    <option value="180">3 Minutes</option>
+                    <option value="300">5 Minutes</option>
+                </select>
+
+                <div class="card-row" style="margin-top: 20px;">
+                    <span style="font-size: 0.9rem;">Light Theme</span>
+                    <input type="checkbox" id="set-theme" style="width: 24px; height: 24px;" onchange="toggleTheme(this.checked)">
+                </div>
+
+                <button class="primary" style="margin-top: 20px;" onclick="saveSettings()">Save Settings</button>
+            </div>
+
+            <div class="card" style="margin-top: auto;">
+                <button onclick="exportCSV()">Export CSV</button>
+                <button style="color: var(--danger); border-color: var(--danger); margin-top: 10px;" onclick="confirmClear()">Clear All Data</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- BOTTOM NAV -->
+    <nav>
+        <a class="nav-item active" onclick="switchTab('dashboard', this)">
+            <svg viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+            <span>Dashboard</span>
+        </a>
+        <a class="nav-item" onclick="switchTab('measure', this)">
+            <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+            <span>Measure</span>
+        </a>
+        <a class="nav-item" onclick="switchTab('history', this)">
+            <svg viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/><path d="M12.5 7H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>
+            <span>History</span>
+        </a>
+        <a class="nav-item" onclick="switchTab('settings', this)">
+            <svg viewBox="0 0 24 24"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.06-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.44,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.73,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.06,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.49-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
+            <span>Settings</span>
+        </a>
+    </nav>
+
+    <!-- ONBOARDING MODAL -->
+    <div class="modal-overlay" id="modal-onboard">
+        <div class="modal-card">
+            <h2>Welcome to OmegaHRV</h2>
+            <p style="color: var(--text-muted); font-size: 0.95rem;">Track your readiness and heart rate variability with your Bluetooth sensor.</p>
+            <input type="text" id="onb-name" placeholder="Your Name">
+            <input type="number" id="onb-age" placeholder="Age">
+            <button class="primary" onclick="completeOnboarding()">Get Started</button>
+        </div>
+    </div>
+
+<script>
+    // --- STATE ---
+    let appState = {
+        measurements: JSON.parse(localStorage.getItem('omegahrv_measurements')) || [],
+        settings: JSON.parse(localStorage.getItem('omegahrv_settings')) || { name: '', age: '', initDuration: '60', duration: '180', lightMode: false },
+        onboarded: localStorage.getItem('omegahrv_onboarded') === 'true'
+    };
+
+    let bleState = {
+        device: null,
+        characteristic: null,
+        running: false,
+        phase: 'stopped',
+        timerInterval: null,
+        timeLeft: 0,
+        initialisationRR: [],
+        rawRRs: [],
+        currentHR: 0,
+        lastResult: null
+    };
+
+    let chartSpark = null;
+    let chartHistory = null;
+
+    // --- INITIALIZATION ---
+    document.addEventListener("DOMContentLoaded", () => {
+        if (!navigator.bluetooth) {
+            document.getElementById('ble-unsupported').style.display = 'block';
+        }
+
+        if (!appState.onboarded) {
+            document.getElementById('modal-onboard').classList.add('active');
+        } else {
+            initApp();
+        }
+
+        // Apply settings
+        document.getElementById('set-name').value = appState.settings.name || '';
+        document.getElementById('set-age').value = appState.settings.age || '';
+        document.getElementById('set-init-duration').value = appState.settings.initDuration || '60';
+        document.getElementById('set-duration').value = appState.settings.duration || '180';
+        document.getElementById('set-theme').checked = appState.settings.lightMode;
+        if(appState.settings.lightMode) document.body.classList.add('light-mode');
+    });
+
+    function initApp() {
+        renderDashboard();
+        renderHistory();
+        Chart.defaults.color = getComputedStyle(document.body).getPropertyValue('--text-muted').trim();
+        Chart.defaults.font.family = 'Inter';
+    }
+
+    function completeOnboarding() {
+        appState.settings.name = document.getElementById('onb-name').value || 'Athlete';
+        appState.settings.age = document.getElementById('onb-age').value || '30';
+        appState.settings.initDuration = '60';
+        appState.settings.duration = '180';
+        localStorage.setItem('omegahrv_settings', JSON.stringify(appState.settings));
+        localStorage.setItem('omegahrv_onboarded', 'true');
+        appState.onboarded = true;
+        document.getElementById('modal-onboard').classList.remove('active');
+        initApp();
+    }
+
+    // --- NAVIGATION ---
+    function switchTab(tabId, el) {
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        el.classList.add('active');
+
+        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+        document.getElementById('view-' + tabId).classList.add('active');
+
+        if(tabId === 'dashboard') renderDashboard();
+        if(tabId === 'history') renderHistory();
+    }
+
+    function toggleTheme(isLight) {
+        if (isLight) document.body.classList.add('light-mode');
+        else document.body.classList.remove('light-mode');
+        
+        Chart.defaults.color = getComputedStyle(document.body).getPropertyValue('--text-muted').trim();
+        if(chartSpark) chartSpark.update();
+        if(chartHistory) chartHistory.update();
+    }
+
+    function saveSettings() {
+        appState.settings.name = document.getElementById('set-name').value;
+        appState.settings.age = document.getElementById('set-age').value;
+        appState.settings.initDuration = document.getElementById('set-init-duration').value;
+        appState.settings.duration = document.getElementById('set-duration').value;
+        appState.settings.lightMode = document.getElementById('set-theme').checked;
+        localStorage.setItem('omegahrv_settings', JSON.stringify(appState.settings));
+        alert("Settings saved!");
+    }
+
+    // --- DASHBOARD RENDER ---
+    function renderDashboard() {
+        const todayStr = new Date().toDateString();
+        const todayMeasurement = appState.measurements.find(m => new Date(m.date).toDateString() === todayStr);
+
+        if (!todayMeasurement) {
+            document.getElementById('dash-empty').style.display = 'flex';
+            document.getElementById('dash-filled').style.display = 'none';
+        } else {
+            document.getElementById('dash-empty').style.display = 'none';
+            document.getElementById('dash-filled').style.display = 'flex';
+
+            document.getElementById('dash-score').innerText = todayMeasurement.readiness;
+            document.getElementById('dash-rmssd').innerText = Math.round(todayMeasurement.rmssd) + ' ms';
+            document.getElementById('dash-hr').innerText = Math.round(todayMeasurement.meanHR) + ' bpm';
+            document.getElementById('dash-si').innerText = Math.round(todayMeasurement.stressIndex);
+
+            // Ring logic
+            let ring = document.getElementById('dash-ring');
+            ring.className = 'readiness-ring';
+            document.getElementById('dash-subtitle').innerText = '';
+            
+            if (todayMeasurement.readiness >= 70) {
+                ring.classList.add('status-green');
+                document.getElementById('dash-subtitle').innerText = 'Ready to train hard';
+            } else if (todayMeasurement.readiness >= 40) {
+                ring.classList.add('status-amber');
+                document.getElementById('dash-subtitle').innerText = 'Train with caution';
+            } else {
+                ring.classList.add('status-red');
+                document.getElementById('dash-subtitle').innerText = 'Rest today';
+            }
+
+            // RMSSD Badge
+            let badge = document.getElementById('dash-rmssd-badge');
+            badge.className = 'badge';
+            if (todayMeasurement.rmssd >= 40) { badge.classList.add('bg-green'); badge.innerText = 'Good'; }
+            else if (todayMeasurement.rmssd >= 20) { badge.classList.add('bg-amber'); badge.innerText = 'Moderate'; }
+            else { badge.classList.add('bg-red'); badge.innerText = 'Low'; }
+
+            renderSparkline();
+        }
+    }
+
+    function renderSparkline() {
+        const ctx = document.getElementById('sparklineChart').getContext('2d');
+        const recent = appState.measurements.slice(-7);
+        const labels = recent.map(m => new Date(m.date).toLocaleDateString(undefined, { weekday: 'short' }));
+        const data = recent.map(m => m.rmssd);
+
+        if (chartSpark) chartSpark.destroy();
+        chartSpark = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: data,
+                    borderColor: '#00c9b1',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { display: false },
+                    y: { display: false }
+                }
+            }
+        });
+    }
+
+    // --- HISTORY RENDER ---
+    function renderHistory() {
+        const listDiv = document.getElementById('history-list');
+        listDiv.innerHTML = '';
+        
+        const recent30 = appState.measurements.slice(-30);
+        
+        if (recent30.length === 0) {
+            listDiv.innerHTML = '<p style="text-align: center; color: var(--text-muted); padding: 20px;">No measurements yet.</p>';
+            return;
+        }
+
+        [...recent30].reverse().forEach(m => {
+            const dateStr = new Date(m.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+            let dotColor = m.rmssd >= 40 ? 'var(--success)' : m.rmssd >= 20 ? 'var(--warning)' : 'var(--danger)';
+            
+            const item = document.createElement('div');
+            item.className = 'history-item';
+            item.innerHTML = `
+                <div class="metrics">
+                    <span class="dot" style="background: ${dotColor}"></span>
+                    <span class="date">${dateStr}</span>
+                </div>
+                <div class="metrics">
+                    <strong style="color: var(--text-main)">${Math.round(m.rmssd)} ms</strong>
+                    <span>(Score: ${m.readiness})</span>
+                </div>
+            `;
+            listDiv.appendChild(item);
+        });
+
+        // 30-day Chart
+        const ctx = document.getElementById('historyChart').getContext('2d');
+        const labels = recent30.map(m => new Date(m.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }));
+        const data = recent30.map(m => m.rmssd);
+
+        if (chartHistory) chartHistory.destroy();
+        chartHistory = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'RMSSD (ms)',
+                    data: data,
+                    borderColor: '#00c9b1',
+                    backgroundColor: 'rgba(0, 201, 177, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.3,
+                    pointBackgroundColor: '#00c9b1'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { ticks: { maxTicksLimit: 7 } }
+                }
+            }
+        });
+    }
+
+    // --- BLUETOOTH MEASUREMENT ---
+    async function startMeasurement() {
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+        if (isIOS && 'speechSynthesis' in window) {
+            const primer = new SpeechSynthesisUtterance('');
+            window.speechSynthesis.speak(primer);
+        }
+        try {
+            const device = await navigator.bluetooth.requestDevice({
+                acceptAllDevices: true,
+                optionalServices: ['heart_rate']
+            });
+
+            bleState.device = device;
+            device.addEventListener('gattserverdisconnected', onDisconnected);
+
+            document.getElementById('btn-connect').innerHTML = "Connecting...";
+
+            const server = await device.gatt.connect();
+            const service = await server.getPrimaryService('heart_rate');
+            const characteristic = await service.getCharacteristic('heart_rate_measurement');
+
+            bleState.characteristic = characteristic;
+            characteristic.addEventListener('characteristicvaluechanged', handleHeartRateData);
+            await characteristic.startNotifications();
+
+            // Transition UI
+            document.getElementById('measure-setup').style.display = 'none';
+            document.getElementById('measure-active').style.display = 'flex';
+            
+            bleState.rawRRs = [];
+            bleState.initialisationRR = [];
+            bleState.running = true;
+
+            let initSecs = parseInt(appState.settings.initDuration);
+            if (isNaN(initSecs)) initSecs = 60;
+            
+            if (initSecs > 0) {
+                bleState.phase = 'init';
+                bleState.timeLeft = initSecs;
+                
+                const timerRing = document.getElementById('timer-ring');
+                if(timerRing) timerRing.className = 'measure-ring ring-init';
+                document.getElementById('live-status-val').innerText = 'Initialising...';
+                document.getElementById('live-status-val').style.color = 'var(--text-muted)';
+                updateTimerDisplay();
+            } else {
+                transitionToMeasure();
+            }
+
+            bleState.timerInterval = setInterval(() => {
+                bleState.timeLeft--;
+                updateTimerDisplay();
+                if (bleState.timeLeft <= 0) {
+                    if (bleState.phase === 'init') {
+                        transitionToMeasure();
+                    } else {
+                        finishMeasurement();
+                    }
+                }
+            }, 1000);
+
+        } catch (error) {
+            console.error(error);
+            alert("Bluetooth Error: " + error.message);
+            document.getElementById('btn-connect').innerHTML = "Connect Sensor";
+        }
+    }
+
+    function transitionToMeasure() {
+        bleState.phase = 'measure';
+        bleState.timeLeft = parseInt(appState.settings.duration);
+        
+        let ring = document.getElementById('timer-ring');
+        ring.className = 'measure-ring ring-flash';
+        
+        if ('speechSynthesis' in window) {
+            const msg = new SpeechSynthesisUtterance('Starting measurement. Please stay still.');
+            msg.lang = 'en-US'; 
+            msg.rate = 0.95; 
+            msg.pitch = 1;
+            window.speechSynthesis.speak(msg);
+        }
+        
+        setTimeout(() => {
+            ring.className = 'measure-ring ring-measure';
+            document.getElementById('live-status-val').innerText = 'Measuring...';
+            document.getElementById('live-status-val').style.color = 'inherit';
+        }, 200);
+        
+        updateTimerDisplay();
+    }
+
+    function onDisconnected() {
+        if(bleState.running) {
+            let banner = document.getElementById('disconn-banner');
+            banner.classList.add('show');
+            setTimeout(() => banner.classList.remove('show'), 4000);
+            cancelMeasurement();
+        }
+    }
+
+    function handleHeartRateData(event) {
+        if (!bleState.running) return;
+
+        let value = event.target.value;
+        let flags = value.getUint8(0);
+        let hr16 = (flags & 1) === 1;
+        let hrValue = hr16 ? value.getUint16(1, true) : value.getUint8(1);
+        
+        document.getElementById('live-hr-val').innerText = hrValue;
+        if (bleState.phase === 'measure') {
+            document.getElementById('live-status-val').innerText = `Measuring... RR count: ${bleState.rawRRs.length} (Packet: ${value.byteLength}B)`;
+        }
+
+        let index = hr16 ? 3 : 2;
+        let energyPresent = (flags & (1 << 3)) !== 0;
+        if (energyPresent) index += 2;
+
+        // Bypass the rrPresent flag check (some devices forget to set bit 4 but append RR anyway)
+        while(index + 2 <= value.byteLength) {
+            let rawRR = value.getUint16(index, true); 
+            let rr_ms = (rawRR / 1024) * 1000;
+            
+            if (bleState.phase === 'measure') {
+                bleState.rawRRs.push(rr_ms);
+            } else if (bleState.phase === 'init') {
+                bleState.initialisationRR.push(rr_ms);
+            }
+            index += 2;
+        }
+    }
+
+    function updateTimerDisplay() {
+        let m = Math.floor(bleState.timeLeft / 60).toString().padStart(2, '0');
+        let s = (bleState.timeLeft % 60).toString().padStart(2, '0');
+        document.getElementById('live-timer-val').innerText = `${m}:${s}`;
+    }
+
+    function cancelMeasurement() {
+        stopBLE();
+        document.getElementById('measure-setup').style.display = 'flex';
+        document.getElementById('measure-active').style.display = 'none';
+        document.getElementById('btn-connect').innerHTML = "Connect Sensor";
+    }
+
+    async function stopBLE() {
+        bleState.running = false;
+        clearInterval(bleState.timerInterval);
+        if (bleState.characteristic) {
+            try { await bleState.characteristic.stopNotifications(); } catch(e){}
+        }
+        if (bleState.device && bleState.device.gatt.connected) {
+            bleState.device.gatt.disconnect();
+        }
+    }
+
+    // --- HRV MATHEMATICS ---
+
+    function filterRR(rawArr) {
+        let filtered = [];
+        let rejects = 0;
+        for (let i = 0; i < rawArr.length; i++) {
+            let rr = rawArr[i];
+            if (rr >= 300 && rr <= 2000) {
+                if (filtered.length === 0) {
+                    filtered.push(rr);
+                } else {
+                    let prev = filtered[filtered.length - 1];
+                    let diffPerc = Math.abs(rr - prev) / prev;
+                    if (diffPerc <= 0.20) { // Reject > 20% ectopic change
+                        filtered.push(rr);
+                        rejects = 0;
+                    } else {
+                        rejects++;
+                        // If we reject 2 or more consecutive beats, our baseline is likely anomalous. Add the current beat and reset baseline.
+                        if (rejects >= 2) {
+                            filtered.push(rr);
+                            rejects = 0;
+                        }
+                    }
+                }
+            }
+        }
+        return filtered;
+    }
+
+    function computeHRV(rrArray) {
+        const n = rrArray.length;
+        if (n < 2) return null;
+
+        let totalRR = 0, sumSqDiff = 0, pnn50Count = 0;
+        
+        for (let i = 0; i < n; i++) totalRR += rrArray[i];
+        
+        for (let i = 1; i < n; i++) {
+            let diff = Math.abs(rrArray[i] - rrArray[i - 1]);
+            sumSqDiff += diff * diff;
+            if (diff > 50) pnn50Count++;
+        }
+
+        let meanRR = totalRR / n;
+        let meanHR = 60000 / meanRR;
+        let rmssd = Math.sqrt(sumSqDiff / (n - 1));
+        let pnn50 = (pnn50Count / (n - 1)) * 100;
+
+        let sumSqDrr = 0;
+        for (let i = 0; i < n; i++) sumSqDrr += Math.pow(rrArray[i] - meanRR, 2);
+        let sdnn = Math.sqrt(sumSqDrr / (n - 1));
+
+        // Baevsky Stress Index (50ms bins)
+        let bins = {};
+        let maxRR = -Infinity;
+        let minRR = Infinity;
+
+        rrArray.forEach(rr => {
+            let binIdx = Math.floor(rr / 50) * 50;
+            bins[binIdx] = (bins[binIdx] || 0) + 1;
+            if (rr > maxRR) maxRR = rr;
+            if (rr < minRR) minRR = rr;
+        });
+
+        let maxBinCount = 0;
+        let modeBinIdx = 0;
+        for (let bin in bins) {
+            if (bins[bin] > maxBinCount) {
+                maxBinCount = bins[bin];
+                modeBinIdx = parseInt(bin);
+            }
+        }
+
+        let mo = (modeBinIdx + 25) / 1000; // mid of bin in secs
+        let amo = (maxBinCount / n) * 100; // percentage
+        let mxdmn = (maxRR - minRR) / 1000; // variation sweep in secs
+        
+        let si = 0;
+        if (mxdmn > 0 && mo > 0) {
+            si = amo / (2 * mo * mxdmn);
+        }
+
+        return { rmssd, sdnn, pnn50, meanHR, stressIndex: si, rrCount: n };
+    }
+
+    function calcReadiness(rmssd) {
+        if (appState.measurements.length < 3) return 65;
+        let recent = appState.measurements.slice(-7);
+        let avg = recent.reduce((sum, m) => sum + m.rmssd, 0) / recent.length;
+        let score = (rmssd / avg) * 65;
+        return Math.max(0, Math.min(100, Math.round(score)));
+    }
+
+    function finishMeasurement() {
+        stopBLE();
+        document.getElementById('measure-active').style.display = 'none';
+
+        let cleanRR = filterRR(bleState.rawRRs);
+        if (cleanRR.length < 10) {
+            alert(`Not enough valid data. Raw length: ${bleState.rawRRs.length}, Valid length: ${cleanRR.length}. Ensure straps are moist & try again.`);
+            discardMeasurement();
+            return;
+        }
+
+        let hrv = computeHRV(cleanRR);
+        let readiness = calcReadiness(hrv.rmssd);
+
+        bleState.lastResult = {
+            date: new Date().toISOString(),
+            readiness: readiness,
+            rmssd: hrv.rmssd,
+            sdnn: hrv.sdnn,
+            pnn50: hrv.pnn50,
+            meanHR: hrv.meanHR,
+            stressIndex: hrv.stressIndex,
+            rrCount: hrv.rrCount
+        };
+
+        // Render UI
+        document.getElementById('measure-result').style.display = 'flex';
+        document.getElementById('res-rmssd').innerText = Math.round(hrv.rmssd) + ' ms';
+        document.getElementById('res-si').innerText = Math.round(hrv.stressIndex);
+        document.getElementById('res-sdnn').innerText = Math.round(hrv.sdnn) + ' ms';
+        document.getElementById('res-pnn50').innerText = hrv.pnn50.toFixed(1) + ' %';
+        
+        let desc = "Great reading.";
+        if(hrv.rmssd < 20) desc = "Low parasympathetic tone. Consider active recovery.";
+        document.getElementById('res-desc').innerText = desc;
+    }
+
+    function saveMeasurement() {
+        if(!bleState.lastResult) return;
+        appState.measurements.push(bleState.lastResult);
+        localStorage.setItem('omegahrv_measurements', JSON.stringify(appState.measurements));
+        
+        // Return to dashboard
+        document.getElementById('measure-result').style.display = 'none';
+        document.getElementById('measure-setup').style.display = 'flex';
+        document.getElementById('btn-connect').innerHTML = "Connect Sensor";
+        switchTab('dashboard', document.querySelector('.nav-item.active'));
+    }
+
+    function discardMeasurement() {
+        bleState.lastResult = null;
+        document.getElementById('measure-result').style.display = 'none';
+        document.getElementById('measure-setup').style.display = 'flex';
+        document.getElementById('btn-connect').innerHTML = "Connect Sensor";
+    }
+
+    // --- DATA EXPORT ---
+    function exportCSV() {
+        if (appState.measurements.length === 0) return alert("No data to export.");
+        
+        let headers = "Date,Readiness,RMSSD,SDNN,pNN50,MeanHR,StressIndex,RRCount\n";
+        let rows = appState.measurements.map(m => {
+            return `${m.date},${m.readiness},${m.rmssd.toFixed(2)},${m.sdnn.toFixed(2)},${m.pnn50.toFixed(2)},${m.meanHR.toFixed(2)},${m.stressIndex.toFixed(2)},${m.rrCount}`;
+        }).join('\n');
+
+        let blob = new Blob([headers + rows], { type: 'text/csv' });
+        let url = URL.createObjectURL(blob);
+        let a = document.createElement('a');
+        a.href = url;
+        a.download = `OmegaHRV_Export_${new Date().toISOString().split('T')[0]}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    function confirmClear() {
+        if(confirm("Are you sure you want to delete all historical measurements? This cannot be undone.")) {
+            appState.measurements = [];
+            localStorage.removeItem('omegahrv_measurements');
+            initApp();
+            alert("Data cleared.");
+        }
+    }
+</script>
+
+</body>
+</html>
