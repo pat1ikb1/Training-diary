@@ -8,6 +8,7 @@
     <title>OmegaHRV</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
     <style>
         :root {
             --bg: #0d1117;
@@ -48,22 +49,69 @@
             padding: env(safe-area-inset-top, 20px) 20px 15px;
             display: flex;
             align-items: center;
-            justify-content: center;
-            gap: 10px;
+            justify-content: space-between;
             border-bottom: 1px solid var(--border);
             flex-shrink: 0;
             background: var(--bg);
-            z-index: 10;
+            z-index: 200;
         }
+
+        .header-left { display: flex; align-items: center; gap: 10px; }
+
+        #hamburger-btn {
+            display: none; background: none; border: none; color: var(--text-main); padding: 8px; cursor: pointer; min-height: unset; width: auto;
+        }
+        #hamburger-btn svg { width: 24px; height: 24px; fill: currentColor; }
 
         .logo-svg { width: 28px; height: 28px; color: var(--accent); }
         .app-title { font-weight: 600; font-size: 1.1rem; letter-spacing: -0.5px; }
 
-        /* Main View Container (Grid overlapping) */
+        .app-layout {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Sidebar Nav */
+        #sidebar {
+            width: 240px;
+            background: var(--card);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            padding: 20px 0;
+            flex-shrink: 0;
+            z-index: 100;
+            transition: transform 0.3s ease;
+        }
+        .nav-item {
+            display: flex; align-items: center; gap: 12px;
+            padding: 12px 20px; color: var(--text-muted); cursor: pointer; text-decoration: none;
+            font-size: 0.95rem; font-weight: 500; transition: color 0.2s, background 0.2s;
+        }
+        .nav-item:hover { background: rgba(255,255,255,0.05); }
+        .nav-item.active { color: var(--accent); background: rgba(0, 201, 177, 0.1); border-right: 3px solid var(--accent); }
+        .nav-item svg { width: 22px; height: 22px; fill: currentColor; }
+
+        @media (max-width: 640px) {
+            #hamburger-btn { display: block; }
+            #sidebar {
+                position: absolute; top: 0; left: 0; bottom: 0;
+                transform: translateX(-100%);
+                border-right: none;
+                box-shadow: 4px 0 16px rgba(0,0,0,0.5);
+            }
+            #sidebar.open { transform: translateX(0); }
+            body.light-mode #sidebar { box-shadow: 4px 0 16px rgba(0,0,0,0.1); }
+        }
+
+        /* Main View Container */
         .view-container {
             flex: 1;
             display: grid;
             overflow: hidden;
+            background: var(--bg);
         }
 
         .view {
@@ -200,22 +248,7 @@
         /* Chart container */
         .chart-container { position: relative; height: 200px; width: 100%; }
 
-        /* Bottom Nav */
-        nav {
-            display: flex;
-            background: var(--card);
-            border-top: 1px solid var(--border);
-            padding-bottom: env(safe-area-inset-bottom, 0px);
-            z-index: 10;
-        }
-        .nav-item {
-            flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
-            padding: 12px 0; color: var(--text-muted); cursor: pointer; text-decoration: none;
-            font-size: 0.75rem; transition: color 0.2s;
-            min-height: 44px; /* touch target */
-        }
-        .nav-item.active { color: var(--accent); }
-        .nav-item svg { width: 22px; height: 22px; fill: currentColor; }
+        /* End Nav */
 
         /* Modal */
         .modal-overlay {
@@ -239,20 +272,98 @@
         }
         .banner.show { transform: translateY(0); }
 
+        /* Training Diary Ext */
+        .segmented-control { display: flex; background: var(--card); border-radius: 8px; padding: 4px; border: 1px solid var(--border); margin-bottom: 15px; }
+        .segmented-control input[type="radio"] { display: none; }
+        .segmented-control label { flex: 1; text-align: center; padding: 8px 12px; border-radius: 6px; font-size: 0.9rem; font-weight: 500; cursor: pointer; transition: all 0.2s; color: var(--text-muted); }
+        .segmented-control input[type="radio"]:checked + label { background: var(--accent); color: #000; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        
+        .data-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        .data-table th, .data-table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+        .data-table th { color: var(--text-muted); font-weight: 500; }
+        .data-table td input { padding: 4px 8px; font-size: 0.85rem; border: 1px solid transparent; background: transparent; width: 100%; min-height: 28px; border-radius: 4px; }
+        .data-table td input:focus { border-color: var(--accent); background: var(--bg); }
+        
+        .chip { padding: 4px 12px; border-radius: 12px; font-size: 0.75rem; border: 1px solid var(--border); background: var(--bg); color: var(--text-muted); cursor: pointer; transition: all 0.2s; white-space: nowrap; user-select: none; }
+        .chip.active { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
+        
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: var(--border); }
+        .calendar-grid.head { background: transparent; border-bottom: 1px solid var(--border); }
+        .cal-header { text-align: center; font-size: 0.75rem; color: var(--text-muted); padding: 8px 4px; }
+        .cal-day { background: var(--card); min-height: 50px; padding: 4px; display: flex; flex-direction: column; cursor: pointer; position: relative; }
+        .cal-day:active { background: var(--bg); }
+        .cal-day .date-num { font-size: 0.75rem; margin-bottom: auto; color: var(--text-muted); }
+        .cal-day.today .date-num { color: var(--accent); font-weight: bold; }
+        .cal-day.empty { background: var(--bg); pointer-events: none;}
+        .cal-indicators { display: flex; gap: 2px; justify-content: flex-end; align-items:flex-end; flex-wrap: wrap; margin-top:4px; }
+        .cal-ind-icon { width: 10px; height: 10px; fill: var(--text-muted); }
+        .pb-star { position: absolute; top: 2px; right: 2px; color: #d29922; font-size: 10px; }
+        
+        #day-modal-content { display: flex; flex-direction: column; gap: 10px; max-height: 60vh; overflow-y: auto;}
+        .log-item { background: var(--bg); padding: 12px; border-radius: 8px; border: 1px solid var(--border); }
+        .log-item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .log-icon { width: 16px; height: 16px; fill: currentColor; }
+
+        .split-kin-row td { padding: 0 !important; border-bottom: 1px solid var(--border); }
+        .split-kin-body { display: none; padding: 8px 12px; background: var(--bg); }
+        .split-kin-body.open { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+        .split-kin-body input { font-size: 0.8rem; padding: 6px 8px; min-height: 32px; }
+        .kin-toggle-btn { background: none; border: none; color: var(--text-muted); font-size: 0.7rem; padding: 2px 6px; min-height: unset; width: auto; cursor: pointer; white-space: nowrap; }
+        .kin-toggle-btn:hover { color: var(--accent); }
+
+        @keyframes pb-flash-anim { 0% { background-color: var(--card); } 20% { background-color: rgba(35, 134, 54, 0.4); } 100% { background-color: var(--card); } }
+        .pb-flash { animation: pb-flash-anim 1.2s ease; }
     </style>
 </head>
 <body>
 
     <header>
-        <svg class="logo-svg" viewBox="0 0 24 24">
-            <path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35zm-2.8-11.85l-1.6 3.2-1.9-1.9-1.4 1.4 3.3 3.3 3-6z" />
-        </svg>
-        <span class="app-title">OmegaHRV</span>
+        <div class="header-left">
+            <svg class="logo-svg" viewBox="0 0 24 24">
+                <path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35zm-2.8-11.85l-1.6 3.2-1.9-1.9-1.4 1.4 3.3 3.3 3-6z" />
+            </svg>
+            <span class="app-title">OmegaHRV</span>
+        </div>
+        <button id="hamburger-btn" onclick="toggleSidebar()">
+            <svg viewBox="0 0 24 24"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
+        </button>
     </header>
 
     <div class="banner" id="disconn-banner">Sensor disconnected. Reconnecting...</div>
 
-    <div class="view-container">
+    <div class="app-layout">
+        <aside id="sidebar">
+            <a class="nav-item active" onclick="switchTab('dashboard', this)">
+                <svg viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+                <span>Dashboard</span>
+            </a>
+            <a class="nav-item" onclick="switchTab('measure', this)">
+                <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                <span>Measure</span>
+            </a>
+            <a class="nav-item" onclick="switchTab('log', this)">
+                <svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
+                <span>Log</span>
+            </a>
+            <a class="nav-item" onclick="switchTab('prs', this)">
+                <svg viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+                <span>PRs</span>
+            </a>
+            <a class="nav-item" onclick="switchTab('calendar', this)">
+                <svg viewBox="0 0 24 24"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11z"/></svg>
+                <span>Calendar</span>
+            </a>
+            <a class="nav-item" onclick="switchTab('history', this)">
+                <svg viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/><path d="M12.5 7H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>
+                <span>History</span>
+            </a>
+            <a class="nav-item" style="margin-top:auto;" onclick="switchTab('settings', this)">
+                <svg viewBox="0 0 24 24"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.06-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.44,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.73,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.06,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.49-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
+                <span>Settings</span>
+            </a>
+        </aside>
+
+        <div class="view-container" id="view-container">
         
         <!-- DASHBOARD -->
         <div class="view active" id="view-dashboard">
@@ -348,6 +459,161 @@
             </div>
         </div>
 
+        <datalist id="exercise-list">
+            <option value="Back Squat"><option value="Front Squat"><option value="Romanian Deadlift"><option value="Deadlift">
+            <option value="Bench Press"><option value="Incline Bench"><option value="Overhead Press"><option value="Barbell Row">
+            <option value="Power Clean"><option value="Hang Clean"><option value="Power Snatch"><option value="Push Press">
+            <option value="Weighted Pull-Up"><option value="Dip"><option value="Lunge"><option value="Hip Thrust">
+        </datalist>
+
+        <!-- LOG -->
+        <div class="view" id="view-log">
+            <h2 style="font-size: 1.2rem;">Training Log</h2>
+            <div class="card" id="log-spark-wrapper" style="display:none; padding:10px;">
+                <canvas id="logSparkline" style="height: 48px; width: 100%;"></canvas>
+            </div>
+            
+            <div class="segmented-control" id="log-type-control">
+                <input type="radio" id="log-type-run" name="log-type" value="running" checked>
+                <label for="log-type-run" onclick="toggleLogType('running')">Running</label>
+                <input type="radio" id="log-type-lift" name="log-type" value="weightlifting">
+                <label for="log-type-lift" onclick="toggleLogType('weightlifting')">Weightlifting</label>
+                <input type="radio" id="log-type-other" name="log-type" value="other">
+                <label for="log-type-other" onclick="toggleLogType('other')">Other</label>
+            </div>
+
+            <div class="card" id="log-form-base">
+                <div class="card-row">
+                    <input type="date" id="log-date" style="flex:1;" onchange="checkLogReadiness()">
+                    <input type="time" id="log-time" style="flex:1;" value="12:00">
+                </div>
+                <input type="text" id="log-title" placeholder="Session Title...">
+                <div class="card-row">
+                    <label style="font-size: 0.85rem; color: var(--text-muted);">Session RPE (1-10)</label>
+                    <output id="log-rpe-val" style="width: 20px; text-align: right;">5</output>
+                </div>
+                <input type="range" id="log-rpe" min="1" max="10" value="5" oninput="document.getElementById('log-rpe-val').value = this.value">
+                <textarea id="log-notes" rows="2" placeholder="Session notes..."></textarea>
+                <div id="log-readiness-badge" class="badge" style="display: none; align-self: flex-start; margin-top: 5px;"></div>
+            </div>
+
+            <div id="log-form-running" class="log-form-section active">
+                <div class="card">
+                    <div class="card-row" style="font-size: 0.85rem; color: var(--text-muted);">
+                        <span>Total Distance</span>
+                        <strong id="run-total-dist" style="font-size: 1.1rem; color: var(--text-main);">0 m</strong>
+                    </div>
+                    <div class="card-row" style="font-size: 0.85rem; color: var(--text-muted);">
+                        <span>Total Time</span>
+                        <strong id="run-total-time" style="font-size: 1.1rem; color: var(--text-main);">00:00</strong>
+                    </div>
+                    <div class="card-row" style="font-size: 0.85rem; color: var(--text-muted); margin-top: 5px; border-top: 1px solid var(--border); padding-top: 8px;">
+                        <span id="run-calc-pace">Pace: --</span>
+                        <span id="run-calc-speed">Speed: --</span>
+                    </div>
+                </div>
+
+                <div class="card-row" style="margin-top: 15px;">
+                    <h3 style="font-size: 1rem;">Splits</h3>
+                    <button style="width: auto; min-height: 30px; padding: 4px 10px; font-size: 0.8rem;" onclick="syncSplitsToTotal()">Sync Totals</button>
+                </div>
+                <div class="card" style="padding:0; overflow-x: auto;">
+                    <table class="data-table" id="run-splits-table">
+                        <thead><tr><th>Split</th><th>Dist (m)</th><th>Time</th><th>Rest</th><th>km/h</th><th>m/s</th><th></th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                    <div style="padding: 10px;">
+                        <button class="primary" style="min-height: 36px; padding: 8px;" onclick="addRunSplit()">+ Add Split</button>
+                    </div>
+                </div>
+
+            </div>
+
+            <div id="log-form-weightlifting" class="log-form-section" style="display: none;">
+                <div class="card">
+                    <input type="text" id="lift-duration" placeholder="Session Duration (mm:ss)">
+                    <div id="lift-modalities" class="chip-group" style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px;">
+                        <div class="chip" onclick="this.classList.toggle('active')">Strength</div>
+                        <div class="chip" onclick="this.classList.toggle('active')">Hypertrophy</div>
+                        <div class="chip" onclick="this.classList.toggle('active')">Power</div>
+                        <div class="chip" onclick="this.classList.toggle('active')">Speed-Strength</div>
+                        <div class="chip" onclick="this.classList.toggle('active')">Plyometrics</div>
+                        <div class="chip" onclick="this.classList.toggle('active')">Conditioning</div>
+                    </div>
+                </div>
+
+                <div id="lift-exercises-container" style="display: flex; flex-direction: column; gap: 16px; margin-top: 15px;"></div>
+                <button class="primary" style="margin-top: 10px;" onclick="addLiftExercise()">+ Add Exercise</button>
+            </div>
+
+            <div id="log-form-other" class="log-form-section" style="display: none;">
+                <div class="card">
+                    <input type="text" id="other-activity" placeholder="Activity Name">
+                    <input type="text" id="other-duration" placeholder="Duration (mm:ss)">
+                </div>
+            </div>
+
+            <button class="primary" style="margin-top: 20px; font-weight: 600;" onclick="saveSession()">Save Session</button>
+
+            <h3 style="font-size: 1.1rem; margin-top: 30px; border-bottom: 1px solid var(--border); padding-bottom: 5px;">Recent Sessions</h3>
+            <div id="log-session-list" style="display: flex; flex-direction: column; gap: 10px; margin-top: 10px;">
+                <!-- list injected here -->
+            </div>
+        </div>
+
+        <!-- PRs -->
+        <div class="view" id="view-prs">
+            <h2 style="font-size: 1.2rem;">Personal Bests</h2>
+            <div class="segmented-control" id="pr-type-control">
+                <input type="radio" id="pr-type-track" name="pr-type" value="track" checked>
+                <label for="pr-type-track" onclick="togglePRType('track')">Track & Field</label>
+                <input type="radio" id="pr-type-gym" name="pr-type" value="gym">
+                <label for="pr-type-gym" onclick="togglePRType('gym')">Gym</label>
+            </div>
+
+            <div id="pr-view-track" class="pr-section active">
+                <div class="card" style="padding: 0; overflow-x: auto;">
+                    <table class="data-table">
+                        <thead><tr><th>Distance</th><th>Best Time</th><th>Date</th></tr></thead>
+                        <tbody id="pr-track-tbody"></tbody>
+                    </table>
+                    <div style="padding: 10px;">
+                        <button style="min-height: 36px; padding: 8px;" onclick="addCustomTrackPB()">+ Add Custom Distance</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="pr-view-gym" class="pr-section" style="display: none;">
+                <div class="card" style="padding: 0; overflow-x: auto;">
+                    <table class="data-table">
+                        <thead><tr><th>Exercise</th><th>Best e1RM</th><th>Best Load</th><th>Date</th></tr></thead>
+                        <tbody id="pr-gym-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- CALENDAR -->
+        <div class="view" id="view-calendar">
+            <div class="card-row" style="margin-bottom: 10px;">
+                <button style="width: auto; padding: 8px 16px;" onclick="changeMonth(-1)">❮</button>
+                <h2 id="calendar-header" style="font-size: 1.2rem; flex: 1; text-align: center;">Month YYYY</h2>
+                <button style="width: auto; padding: 8px 16px;" onclick="changeMonth(1)">❯</button>
+            </div>
+            <div class="card" style="padding: 0;">
+                <div class="calendar-grid head">
+                    <div class="cal-header">Mon</div><div class="cal-header">Tue</div><div class="cal-header">Wed</div>
+                    <div class="cal-header">Thu</div><div class="cal-header">Fri</div><div class="cal-header">Sat</div><div class="cal-header">Sun</div>
+                </div>
+                <div class="calendar-grid" id="calendar-days">
+                    <!-- days injected here -->
+                </div>
+                <div style="padding: 10px; border-top: 1px solid var(--border); text-align: center;">
+                    <button style="width:auto; padding: 6px 12px; font-size: 0.85rem;" onclick="renderCalendar(new Date().getFullYear(), new Date().getMonth())">Today</button>
+                </div>
+            </div>
+        </div>
+
         <!-- HISTORY -->
         <div class="view" id="view-history">
             <h2 style="font-size: 1.2rem;">30-Day History</h2>
@@ -401,25 +667,8 @@
         </div>
     </div>
 
-    <!-- BOTTOM NAV -->
-    <nav>
-        <a class="nav-item active" onclick="switchTab('dashboard', this)">
-            <svg viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
-            <span>Dashboard</span>
-        </a>
-        <a class="nav-item" onclick="switchTab('measure', this)">
-            <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-            <span>Measure</span>
-        </a>
-        <a class="nav-item" onclick="switchTab('history', this)">
-            <svg viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/><path d="M12.5 7H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>
-            <span>History</span>
-        </a>
-        <a class="nav-item" onclick="switchTab('settings', this)">
-            <svg viewBox="0 0 24 24"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.06-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.44,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.73,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.06,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.49-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
-            <span>Settings</span>
-        </a>
-    </nav>
+        </div> <!-- End view container -->
+    </div> <!-- End app layout -->
 
     <!-- ONBOARDING MODAL -->
     <div class="modal-overlay" id="modal-onboard">
@@ -437,8 +686,17 @@
     let appState = {
         measurements: JSON.parse(localStorage.getItem('omegahrv_measurements')) || [],
         settings: JSON.parse(localStorage.getItem('omegahrv_settings')) || { name: '', age: '', initDuration: '60', duration: '180', lightMode: false },
-        onboarded: localStorage.getItem('omegahrv_onboarded') === 'true'
+        onboarded: localStorage.getItem('omegahrv_onboarded') === 'true',
+        sessions: JSON.parse(localStorage.getItem('omegahrv_sessions')) || [],
+        personalBests: JSON.parse(localStorage.getItem('omegahrv_pbs')) || { track: {}, gym: {} }
     };
+
+    const qs = (sel, ctx=document) => ctx.querySelector(sel);
+    const qsa = (sel, ctx=document) => [...ctx.querySelectorAll(sel)];
+    
+    function toggleSidebar() {
+        document.getElementById('sidebar').classList.toggle('open');
+    }
 
     let bleState = {
         device: null,
@@ -496,16 +754,45 @@
         initApp();
     }
 
-    // --- NAVIGATION ---
+    // --- NAVIGATION & UI HELPERS ---
     function switchTab(tabId, el) {
         document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-        el.classList.add('active');
+        if(el) el.classList.add('active');
 
         document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
         document.getElementById('view-' + tabId).classList.add('active');
+        document.getElementById('sidebar').classList.remove('open'); // close on mobile
 
         if(tabId === 'dashboard') renderDashboard();
         if(tabId === 'history') renderHistory();
+        if(tabId === 'log') { document.getElementById('log-date').value = new Date().toISOString().split('T')[0]; checkLogReadiness(); renderSessionList(); renderLogSparkline(); }
+        if(tabId === 'prs') { renderPBsTrack(); renderPBsGym(); renderLogSparkline(); }
+        if(tabId === 'calendar') renderCalendar(new Date().getFullYear(), new Date().getMonth());
+    }
+
+    function toggleLogType(type) {
+        qsa('.log-form-section').forEach(el => el.style.display = 'none');
+        document.getElementById('log-form-' + type).style.display = 'block';
+    }
+
+    function togglePRType(type) {
+        qsa('.pr-section').forEach(el => el.style.display = 'none');
+        document.getElementById('pr-view-' + type).style.display = 'block';
+    }
+
+    function toggleAccordion(id) {
+        let el = document.getElementById(id);
+        if (el.style.maxHeight && el.style.maxHeight !== '0px') {
+            el.style.maxHeight = '0px';
+        } else {
+            el.style.maxHeight = el.scrollHeight + 'px';
+        }
+    }
+
+    function toggleSplitKin(btn) {
+        let kinBody = btn.closest('tr').nextElementSibling.querySelector('.split-kin-body');
+        kinBody.classList.toggle('open');
+        btn.textContent = kinBody.classList.contains('open') ? 'Kin ▴' : 'Kin ▾';
     }
 
     function toggleTheme(isLight) {
@@ -998,6 +1285,493 @@
             alert("Data cleared.");
         }
     }
+    // --- TRAINING DIARY LOGIC ---
+    function checkLogReadiness() {
+        let date = document.getElementById('log-date').value;
+        let badge = document.getElementById('log-readiness-badge');
+        let exactMatch = appState.measurements.find(m => m.date.startsWith(date));
+        if(exactMatch) {
+            badge.style.display = 'block';
+            badge.innerText = `Readiness: ${exactMatch.readiness}/100`;
+            if(exactMatch.readiness >= 85) badge.className = 'badge bg-green';
+            else if(exactMatch.readiness > 60) badge.className = 'badge bg-amber';
+            else badge.className = 'badge bg-red';
+        } else {
+            badge.style.display = 'none';
+        }
+    }
+
+    function addRunSplit() {
+        let tbody = qs('#run-splits-table tbody');
+        let splitNum = Math.floor(tbody.children.length / 2) + 1;
+        let tr = document.createElement('tr');
+        tr.className = 'split-data-row';
+        tr.innerHTML = `
+            <td><input type="text" placeholder="Split ${splitNum}" class="split-lbl"></td>
+            <td><input type="number" step="any" placeholder="1000" class="split-dist"></td>
+            <td><input type="text" placeholder="mm:ss" class="split-time"></td>
+            <td><input type="text" placeholder="mm:ss" class="split-rest" style="max-width:70px;"></td>
+            <td class="split-kmh">--</td><td class="split-ms">--</td>
+            <td style="display:flex; gap:2px; align-items:center;">
+                <button class="kin-toggle-btn" onclick="toggleSplitKin(this)">Kin ▾</button>
+                <button style="padding:4px; min-height:unset; width:auto;" onclick="removeSplitRow(this)">✕</button>
+            </td>
+        `;
+        let kinTr = document.createElement('tr');
+        kinTr.className = 'split-kin-row';
+        kinTr.innerHTML = `<td colspan="7"><div class="split-kin-body">
+            <input type="number" class="kin-gct" placeholder="GCT (ms)">
+            <input type="number" class="kin-ft" placeholder="Flight (ms)">
+            <input type="number" class="kin-sl" placeholder="Stride L (m)" step="0.01">
+            <input type="number" class="kin-sf" placeholder="Stride F (s/min)">
+            <input type="number" class="kin-vo" placeholder="Vert Osc (cm)" step="0.1">
+        </div></td>`;
+        // input listener for auto-calc
+        tr.querySelectorAll('input').forEach(inp => inp.addEventListener('blur', function() {
+            let dist = parseFloat(tr.querySelector('.split-dist').value);
+            let timeStr = tr.querySelector('.split-time').value;
+            let secs = parseTime(timeStr);
+            if(dist && secs) {
+                let speedMs = dist / secs;
+                let kmh = speedMs * 3.6;
+                tr.querySelector('.split-ms').innerText = speedMs.toFixed(2);
+                tr.querySelector('.split-kmh').innerText = kmh.toFixed(1);
+            }
+            recalcRunTotals();
+        }));
+        tbody.appendChild(tr);
+        tbody.appendChild(kinTr);
+    }
+
+    function removeSplitRow(btn) {
+        let dataRow = btn.closest('tr');
+        let kinRow = dataRow.nextElementSibling;
+        if(kinRow && kinRow.classList.contains('split-kin-row')) kinRow.remove();
+        dataRow.remove();
+        recalcRunTotals();
+    }
+
+    function recalcRunTotals() {
+        let distAccum = 0;
+        let timeAccum = 0;
+        let restAccum = 0;
+        qsa('#run-splits-table tbody tr.split-data-row').forEach(tr => {
+            let d = parseFloat(tr.querySelector('.split-dist').value) || 0;
+            let t = parseTime(tr.querySelector('.split-time').value) || 0;
+            let r = parseTime(tr.querySelector('.split-rest').value) || 0;
+            distAccum += d; timeAccum += t; restAccum += r;
+        });
+        document.getElementById('run-total-dist').innerText = distAccum > 0 ? (distAccum >= 1000 ? (distAccum/1000).toFixed(2) + ' km' : distAccum + ' m') : '0 m';
+        let timeLabel = timeAccum > 0 ? formatTimeLength(timeAccum, true) : '00:00';
+        if(restAccum > 0) timeLabel += ` (+ ${formatTimeLength(restAccum)} rest)`;
+        document.getElementById('run-total-time').innerText = timeLabel;
+        document.getElementById('run-total-dist').dataset.metres = distAccum;
+        document.getElementById('run-total-time').dataset.secs = timeAccum;
+        document.getElementById('run-total-time').dataset.restSecs = restAccum;
+        updateRunCalcs();
+    }
+
+    // Keep old name as alias so the Sync Totals button still works
+    function syncSplitsToTotal() { recalcRunTotals(); }
+
+    function updateRunCalcs() {
+        let distM = parseFloat(document.getElementById('run-total-dist').dataset.metres) || 0;
+        let secs = parseFloat(document.getElementById('run-total-time').dataset.secs) || 0;
+        if(!distM || !secs) {
+            document.getElementById('run-calc-speed').innerText = 'Speed: --';
+            document.getElementById('run-calc-pace').innerText = 'Pace: --';
+            return;
+        }
+
+        let speedMs = distM / secs;
+        let kmh = speedMs * 3.6;
+        document.getElementById('run-calc-speed').innerText = `${speedMs.toFixed(2)} m/s`;
+        document.getElementById('run-calc-pace').innerText = `${kmh.toFixed(1)} km/h`;
+    }
+
+    function addLiftExercise() {
+        let container = document.getElementById('lift-exercises-container');
+        let card = document.createElement('div');
+        card.className = 'card lift-ex-card';
+        card.style.position = 'relative';
+        card.innerHTML = `
+            <button style="position:absolute; top:8px; right:8px; padding:4px; width:auto; min-height:unset;" onclick="this.closest('.card').remove()">✕</button>
+            <input class="ex-name" type="text" list="exercise-list" placeholder="Exercise Name..." style="margin-bottom:10px; width: 85%;">
+            <table class="data-table">
+                <thead><tr><th>Reps</th><th>Load</th><th>Type</th><th>Peak W</th><th></th></tr></thead>
+                <tbody></tbody>
+            </table>
+            <button style="margin-top:8px; min-height:30px; font-size:0.8rem; padding: 4px;" onclick="addExSet(this)">+ Add Set</button>
+        `;
+        container.appendChild(card);
+        // Add one default set
+        addExSet(card.querySelector('button:last-child'));
+    }
+
+    function addExSet(btn) {
+        let tbody = btn.previousElementSibling.querySelector('tbody');
+        let tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><input type="number" class="set-reps" placeholder="0"></td>
+            <td><input type="number" step="any" class="set-load" placeholder="kg"></td>
+            <td><select class="set-type"><option value="working">Work</option><option value="warmup">Warm</option></select></td>
+            <td><input type="number" class="set-peak" placeholder="W"></td>
+            <td><button style="padding:4px; min-height:unset;" onclick="this.closest('tr').remove()">✕</button></td>
+        `;
+        tbody.appendChild(tr);
+    }
+
+    function parseTime(str) {
+        if(!str) return 0;
+        let p = str.split(':');
+        if(p.length === 2) return parseFloat(p[0])*60 + parseFloat(p[1]);
+        if(p.length === 3) return parseFloat(p[0])*3600 + parseFloat(p[1])*60 + parseFloat(p[2]);
+        return parseFloat(str) || 0;
+    }
+    
+    function formatTimeLength(secs, showMs = false) {
+        if(!secs || isNaN(secs) || secs === Infinity) return "00:00";
+        let m = Math.floor(secs / 60);
+        let s = secs % 60;
+        if(showMs) return `${m}:${s.toFixed(2).padStart(5, '0')}`;
+        return `${m}:${Math.floor(s).toString().padStart(2, '0')}`;
+    }
+
+    function getSelectedRadio(name) {
+        let el = document.querySelector(`input[name="${name}"]:checked`);
+        return el ? el.value : null;
+    }
+
+    function saveSession() {
+        let type = getSelectedRadio('log-type');
+        let title = document.getElementById('log-title').value.trim() || 'Training Session';
+        
+        // Exact measure match
+        let date = document.getElementById('log-date').value;
+        let exactMatch = appState.measurements.find(m => m.date.startsWith(date));
+
+        let sess = {
+            id: crypto.randomUUID(),
+            date: date,
+            time: document.getElementById('log-time').value,
+            title: title,
+            type: type,
+            rpe: parseInt(document.getElementById('log-rpe').value),
+            notes: document.getElementById('log-notes').value,
+            readinessScore: exactMatch ? exactMatch.readiness : null,
+            hasPB: false,
+            pbDetails: []
+        };
+
+        if(type === 'running') {
+            let dataRows = qsa('#run-splits-table tbody tr.split-data-row');
+            let splits = dataRows.map(tr => {
+                let kinRow = tr.nextElementSibling;
+                let kin = null;
+                if(kinRow && kinRow.classList.contains('split-kin-row')) {
+                    let gct = parseFloat(kinRow.querySelector('.kin-gct').value);
+                    let ft = parseFloat(kinRow.querySelector('.kin-ft').value);
+                    let sl = parseFloat(kinRow.querySelector('.kin-sl').value);
+                    let sf = parseFloat(kinRow.querySelector('.kin-sf').value);
+                    let vo = parseFloat(kinRow.querySelector('.kin-vo').value);
+                    if(gct || ft || sl || sf || vo) kin = { gct, ft, sl, sf, vo };
+                }
+                return {
+                    label: tr.querySelector('.split-lbl').value,
+                    distance: parseFloat(tr.querySelector('.split-dist').value) || 0,
+                    time: parseTime(tr.querySelector('.split-time').value),
+                    rest: parseTime(tr.querySelector('.split-rest').value) || 0,
+                    kinematics: kin
+                };
+            }).filter(s => s.distance > 0 && s.time > 0);
+
+            let distM = parseFloat(document.getElementById('run-total-dist').dataset.metres) || 0;
+
+            sess.running = {
+                totalDistance: distM,
+                totalTime: parseFloat(document.getElementById('run-total-time').dataset.secs) || 0,
+                unit: 'm',
+                splits: splits
+            };
+        } else if(type === 'weightlifting') {
+            let mods = qsa('#lift-modalities .chip.active').map(c => c.innerText);
+            let exs = qsa('.lift-ex-card').map(card => {
+                let sRows = card.querySelectorAll('tbody tr');
+                return {
+                    name: card.querySelector('.ex-name').value.trim() || 'Unknown',
+                    sets: [...sRows].map(r => ({
+                        reps: parseInt(r.querySelector('.set-reps').value) || 0,
+                        load: parseFloat(r.querySelector('.set-load').value) || 0,
+                        type: r.querySelector('.set-type').value,
+                        peakPower: parseFloat(r.querySelector('.set-peak').value) || null
+                    }))
+                };
+            }).filter(e => e.name !== 'Unknown');
+            
+            sess.lifting = {
+                duration: document.getElementById('lift-duration').value,
+                modalities: mods,
+                exercises: exs
+            };
+        } else {
+            sess.other = { activity: document.getElementById('other-activity').value, duration: document.getElementById('other-duration').value };
+        }
+
+        checkAndUpdatePBs(sess);
+
+        appState.sessions.unshift(sess);
+        appState.sessions.sort((a,b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
+        
+        localStorage.setItem('omegahrv_sessions', JSON.stringify(appState.sessions));
+        
+        if(sess.hasPB) {
+            confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, zIndex: 1000 });
+        }
+        
+        // Reset base form
+        document.getElementById('log-title').value = '';
+        document.getElementById('log-notes').value = '';
+        renderSessionList();
+        renderLogSparkline();
+        alert(sess.hasPB ? `Session Saved! ${sess.pbDetails.join(', ')}` : "Session saved.");
+    }
+
+    function checkAndUpdatePBs(sess) {
+        if(sess.type === 'running' && sess.running) {
+            let checkDist = (distM, t) => {
+                if(distM <= 0 || t <= 0) return;
+                let k = null;
+                // Auto map hardcoded rounds
+                [10,20,30,40,50,60,80,100,150,200,300,400,600,800,1000,1500,3000,5000,10000].forEach(d => {
+                    if(Math.abs(distM - d) < (d*0.02)) k = d + "m";
+                });
+                if(Math.abs(distM - 1609) < 30) k = "1 Mile";
+                if(!k) k = Math.round(distM) + "m";
+                
+                let existing = appState.personalBests.track[k];
+                if(!existing || t < existing.time) {
+                    appState.personalBests.track[k] = { time: t, date: sess.date, speed: distM/t };
+                    sess.hasPB = true;
+                    sess.pbDetails.push(`${k} in ${formatTimeLength(t, true)}`);
+                }
+            };
+            checkDist(sess.running.totalDistance, sess.running.totalTime);
+            sess.running.splits.forEach(s => checkDist(s.distance, s.time));
+        }
+
+        if(sess.type === 'weightlifting' && sess.lifting) {
+            sess.lifting.exercises.forEach(ex => {
+                ex.sets.forEach(s => {
+                    if(s.load > 0 && s.reps > 0 && s.type !== 'warmup') {
+                        let e1rm = s.load * (1 + s.reps/30);
+                        let k = ex.name;
+                        let existing = appState.personalBests.gym[k];
+                        if(!existing || Object.keys(existing).length === 0) {
+                            appState.personalBests.gym[k] = { e1rm: e1rm, load: s.load, reps: s.reps, date: sess.date, peak: s.peakPower };
+                            sess.hasPB = true;
+                            sess.pbDetails.push(`${k} e1RM: ${Math.round(e1rm)}kg`);
+                        } else {
+                            if(e1rm > existing.e1rm) {
+                                existing.e1rm = e1rm; sess.hasPB = true;
+                                existing.date = sess.date; existing.load = s.load; existing.reps = s.reps;
+                            }
+                            if(s.load > existing.load) { existing.load = s.load; existing.reps = s.reps; }
+                            if(s.peakPower && (!existing.peak || s.peakPower > existing.peak)) { existing.peak = s.peakPower; }
+                        }
+                    }
+                });
+            });
+        }
+        
+        if(sess.hasPB) localStorage.setItem('omegahrv_pbs', JSON.stringify(appState.personalBests));
+    }
+
+    // --- RENDERING VIEWS ---
+    function renderSessionList() {
+        let c = document.getElementById('log-session-list');
+        c.innerHTML = '';
+        if(appState.sessions.length === 0) { c.innerHTML = '<p style="color:var(--text-muted); font-size:0.9rem;">No sessions logged yet.</p>'; return; }
+        
+        appState.sessions.forEach(s => {
+            let el = document.createElement('div');
+            el.className = 'log-item';
+            let icon = (s.type === 'running')?'🏃':(s.type === 'weightlifting')?'🏋️':'○';
+            let pbDot = s.hasPB ? '<span class="pb-star" style="position:static; margin-left:4px;">★ PR</span>' : '';
+            let readB = s.readinessScore ? `<span class="badge ${s.readinessScore>=75?'bg-green':s.readinessScore>40?'bg-amber':'bg-red'}" style="font-size:0.7rem;">CNS: ${s.readinessScore}</span>` : '';
+            
+            el.innerHTML = `
+                <div class="log-item-header">
+                    <strong style="font-size: 0.95rem;">${icon} ${s.title} ${pbDot}</strong>
+                    <span style="font-size:0.8rem; color:var(--text-muted);">${s.date} ${s.time}</span>
+                </div>
+                <div style="font-size:0.85rem; color:var(--text-muted); margin-bottom: 8px;">${readB} RPE: ${s.rpe}/10</div>
+                <button style="border:none; color:var(--danger); background:none; text-align:left; font-size:0.8rem; padding:0; min-height:unset; display:inline;" onclick="deleteSession('${s.id}')">Delete</button>
+            `;
+            c.appendChild(el);
+        });
+    }
+
+    window.deleteSession = function(id) {
+        if(confirm("Delete this session forever?")) {
+            appState.sessions = appState.sessions.filter(s => s.id !== id);
+            localStorage.setItem('omegahrv_sessions', JSON.stringify(appState.sessions));
+            renderSessionList();
+            renderPBsGym(); renderPBsTrack();
+        }
+    };
+
+    function addCustomTrackPB() {
+        let d = prompt("Enter custom distance (e.g., '55m' or 'Marathon'):");
+        if(d) {
+            if(!appState.personalBests.track[d]) {
+                appState.personalBests.track[d] = null;
+                renderPBsTrack();
+            }
+        }
+    }
+
+    function renderPBsTrack() {
+        let t = document.getElementById('pr-track-tbody');
+        t.innerHTML = '';
+        let dKeys = ["10m","20m","30m","40m","50m","60m","80m","100m","150m","200m","300m","400m","600m","800m","1000m","1500m","1 Mile","3000m","5000m","10000m"];
+        let allKeys = Object.keys(appState.personalBests.track);
+        let merged = [...new Set([...dKeys, ...allKeys])];
+        merged.sort((a,b) => parseInt(a) - parseInt(b));
+        
+        merged.forEach(k => {
+            let row = document.createElement('tr');
+            let pb = appState.personalBests.track[k];
+            if(pb) {
+                let st = formatTimeLength(pb.time, true);
+                row.innerHTML = `<td><strong>${k}</strong></td><td style="color:var(--accent); font-weight:600;">${st}</td><td>${pb.date}</td>`;
+            } else {
+                row.innerHTML = `<td>${k}</td><td style="color:var(--text-muted)">--</td><td>--</td>`;
+            }
+            t.appendChild(row);
+        });
+    }
+
+    function renderPBsGym() {
+        let t = document.getElementById('pr-gym-tbody');
+        t.innerHTML = '';
+        let keys = Object.keys(appState.personalBests.gym).sort();
+        keys.forEach(k => {
+            let row = document.createElement('tr');
+            let pb = appState.personalBests.gym[k];
+            row.innerHTML = `<td><strong>${k}</strong></td><td style="color:var(--accent); font-weight:600;">${Math.round(pb.e1rm)}kg</td><td>${pb.load}kg × ${pb.reps}</td><td style="font-size:0.75rem">${pb.date}</td>`;
+            t.appendChild(row);
+        });
+    }
+
+    // --- CALENDAR RENDERING ---
+    let currentCalYear = new Date().getFullYear();
+    let currentCalMonth = new Date().getMonth();
+
+    window.changeMonth = function(dir) {
+        currentCalMonth += dir;
+        if(currentCalMonth > 11) { currentCalMonth = 0; currentCalYear++; }
+        if(currentCalMonth < 0) { currentCalMonth = 11; currentCalYear--; }
+        renderCalendar(currentCalYear, currentCalMonth);
+    };
+
+    function renderCalendar(year, month) {
+        currentCalYear = year; currentCalMonth = month;
+        let c = document.getElementById('calendar-days');
+        c.innerHTML = '';
+        let monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+        document.getElementById('calendar-header').innerText = `${monthNames[month]} ${year}`;
+        
+        let firstDay = new Date(year, month, 1).getDay();
+        let monShift = firstDay === 0 ? 6 : firstDay - 1; // Make Monday 0
+        let daysInMonth = new Date(year, month + 1, 0).getDate();
+        
+        for(let i=0; i<monShift; i++) {
+            c.innerHTML += `<div class="cal-day empty"></div>`;
+        }
+        
+        let todayStr = new Date().toISOString().split('T')[0];
+        
+        for(let d=1; d<=daysInMonth; d++) {
+            let dateStr = `${year}-${(month+1).toString().padStart(2,'0')}-${d.toString().padStart(2,'0')}`;
+            let el = document.createElement('div');
+            el.className = 'cal-day' + (dateStr === todayStr ? ' today' : '');
+            
+            let om = appState.measurements.find(m => m.date.startsWith(dateStr));
+            let sesss = appState.sessions.filter(s => s.date === dateStr);
+            
+            let indHTML = '';
+            if(om) {
+                let cl = om.readiness >= 75 ? 'var(--success)' : om.readiness > 40 ? 'var(--warning)' : 'var(--danger)';
+                indHTML += `<div style="width:8px; height:8px; border-radius:50%; background:${cl};"></div>`;
+            }
+            if(sesss.length>0) {
+                let hasPb = sesss.some(s => s.hasPB);
+                if(hasPb) el.innerHTML += `<span class="pb-star">★</span>`;
+                indHTML += `<div style="font-size:10px;">•</div>`.repeat(Math.min(sesss.length, 3));
+            }
+            
+            el.innerHTML += `<span class="date-num">${d}</span><div class="cal-indicators">${indHTML}</div>`;
+            el.onclick = () => openDayModal(dateStr, om, sesss);
+            c.appendChild(el);
+        }
+        
+        let rem = 42 - (monShift + daysInMonth);
+        for(let i=0; i<rem; i++) c.innerHTML += `<div class="cal-day empty"></div>`;
+    }
+
+    function openDayModal(date, om, sessions) {
+        let ol = document.createElement('div');
+        ol.className = 'modal-overlay active';
+        let hHTML = `<h2>${date}</h2>`;
+        if(om) {
+            hHTML += `<div class="card" style="background:var(--card); font-size:0.85rem;"><strong style="font-size:1rem; color:var(--accent);">Readiness: ${om.readiness}/100</strong><br>RMSSD ${Math.round(om.rmssd)}ms | HR ${Math.round(om.meanHR)}bpm | SDNN ${Math.round(om.sdnn)}</div>`;
+        } else {
+            hHTML += `<p style="font-size:0.85rem; color:var(--text-muted)">No readiness data.</p>`;
+        }
+        if(sessions.length>0) {
+            hHTML += `<h3 style="font-size:1rem; margin-top:10px;">Sessions</h3>`;
+            sessions.forEach(s => {
+                hHTML += `<div style="border-left:2px solid var(--accent); padding-left:10px; margin-bottom:5px; font-size:0.85rem;"><strong>${s.title}</strong><br><span style="color:var(--text-muted)">RPE ${s.rpe}/10 | ${s.time}</span></div>`;
+            });
+        }
+        ol.innerHTML = `<div class="modal-card"><button style="position:absolute; top:10px; right:10px; border:none; background:none; font-size:1.5rem; color:var(--text-main);" onclick="this.closest('.modal-overlay').remove()">×</button>${hHTML}</div>`;
+        document.body.appendChild(ol);
+    }
+
+    let logSparkChartInst = null;
+    function renderLogSparkline() {
+        let ws = document.getElementById('log-spark-wrapper');
+        ws.style.display = 'block';
+        let ctx = document.getElementById('logSparkline');
+        if(!ctx) return;
+        if(logSparkChartInst) logSparkChartInst.destroy();
+        
+        let recent = appState.measurements.slice(-7);
+        if(recent.length<2) { ws.style.display='none'; return; }
+        
+        let prim = getComputedStyle(document.body).getPropertyValue('--accent').trim();
+        
+        logSparkChartInst = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: recent.map(m => ''),
+                datasets: [{
+                    data: recent.map(m => m.readiness),
+                    borderColor: prim,
+                    borderWidth: 2,
+                    tension: 0.4,
+                    pointRadius: 0,
+                    fill: { target: 'origin', above: 'rgba(0, 201, 177, 0.2)' }
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false }, tooltip: { enabled: false } },
+                scales: { x: { display: false }, y: { display: false, min: 0, max: 100 } }
+            }
+        });
+    }
+
 </script>
 
 </body>
