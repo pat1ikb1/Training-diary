@@ -9,6 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         :root {
             --bg: #0d1117;
@@ -313,6 +314,22 @@
 
         @keyframes pb-flash-anim { 0% { background-color: var(--card); } 20% { background-color: rgba(35, 134, 54, 0.4); } 100% { background-color: var(--card); } }
         .pb-flash { animation: pb-flash-anim 1.2s ease; }
+
+        /* Auth Modal */
+        #modal-auth .modal-card { max-width: 360px; }
+        #modal-auth .auth-toggle { font-size: 0.85rem; color: var(--text-muted); text-align: center; cursor: pointer; }
+        #modal-auth .auth-toggle span { color: var(--accent); font-weight: 500; }
+        #modal-auth .auth-error { color: var(--danger); font-size: 0.85rem; text-align: center; min-height: 1.2em; }
+
+        /* Sync indicator */
+        .sync-indicator { display: flex; align-items: center; gap: 6px; font-size: 0.75rem; color: var(--text-muted); padding: 0 8px; }
+        .sync-indicator svg { width: 16px; height: 16px; fill: currentColor; }
+        .sync-indicator.syncing { color: var(--accent); }
+        .sync-indicator.synced { color: var(--success); }
+        .sync-indicator.offline { color: var(--warning); }
+        .sync-indicator.error { color: var(--danger); }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .sync-indicator.syncing svg { animation: spin 1s linear infinite; }
     </style>
 </head>
 <body>
@@ -324,9 +341,15 @@
             </svg>
             <span class="app-title">OmegaHRV</span>
         </div>
-        <button id="hamburger-btn" onclick="toggleSidebar()">
-            <svg viewBox="0 0 24 24"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
-        </button>
+        <div style="display:flex; align-items:center; gap:4px;">
+            <div class="sync-indicator" id="sync-status" style="display:none;">
+                <svg viewBox="0 0 24 24"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
+                <span id="sync-label">Synced</span>
+            </div>
+            <button id="hamburger-btn" onclick="toggleSidebar()">
+                <svg viewBox="0 0 24 24"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
+            </button>
+        </div>
     </header>
 
     <div class="banner" id="disconn-banner">Sensor disconnected. Reconnecting...</div>
@@ -660,6 +683,12 @@
                 <button class="primary" style="margin-top: 20px;" onclick="saveSettings()">Save Settings</button>
             </div>
 
+            <div class="card" style="margin-top: 20px;">
+                <span style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px;">Cloud Sync</span>
+                <button onclick="forceCloudSync()" style="margin-bottom: 8px;">⟳ Force Cloud Sync</button>
+                <button id="btn-logout" style="color: var(--warning); border-color: var(--warning);" onclick="logOut()">Log Out</button>
+            </div>
+
             <div class="card" style="margin-top: auto;">
                 <button onclick="exportCSV()">Export CSV</button>
                 <button style="color: var(--danger); border-color: var(--danger); margin-top: 10px;" onclick="confirmClear()">Clear All Data</button>
@@ -669,6 +698,22 @@
 
         </div> <!-- End view container -->
     </div> <!-- End app layout -->
+
+    <!-- AUTH MODAL -->
+    <div class="modal-overlay" id="modal-auth">
+        <div class="modal-card">
+            <svg viewBox="0 0 24 24" style="width:40px; height:40px; fill:var(--accent); margin: 0 auto;">
+                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35zm-2.8-11.85l-1.6 3.2-1.9-1.9-1.4 1.4 3.3 3.3 3-6z"/>
+            </svg>
+            <h2 id="auth-title" style="text-align:center;">Sign In</h2>
+            <p style="color: var(--text-muted); font-size: 0.85rem; text-align:center;">Your training data, synced across all devices.</p>
+            <input type="email" id="auth-email" placeholder="Email address">
+            <input type="password" id="auth-password" placeholder="Password">
+            <p class="auth-error" id="auth-error"></p>
+            <button class="primary" id="auth-submit-btn" onclick="handleAuth()">Sign In</button>
+            <p class="auth-toggle" id="auth-toggle" onclick="toggleAuthMode()">Don't have an account? <span>Sign Up</span></p>
+        </div>
+    </div>
 
     <!-- ONBOARDING MODAL -->
     <div class="modal-overlay" id="modal-onboard">
@@ -682,6 +727,30 @@
     </div>
 
 <script>
+    // --- SUPABASE CLIENT ---
+    const SUPABASE_URL = 'https://lkbexgqclzodqllfemix.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxrYmV4Z3FjbHpvZHFsbGZlbWl4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU3NjE3NjEsImV4cCI6MjA5MTMzNzc2MX0.LikIfvtMf-XlU9SAb1j-uBpKxn93p724AIoqfnG9B-E';
+    let sbClient = null;
+    try {
+        const { createClient } = window.supabase;
+        sbClient = createClient(SUPABASE_URL, SUPABASE_KEY);
+    } catch(e) {
+        console.warn('Supabase init failed:', e);
+    }
+    // Provide a stub so calls don't crash if init failed
+    if(!sbClient) {
+        sbClient = {
+            auth: {
+                getSession: async () => ({ data: { session: null } }),
+                signUp: async () => ({ error: { message: 'Supabase not available' } }),
+                signInWithPassword: async () => ({ error: { message: 'Supabase not available' } }),
+                signOut: async () => {}
+            },
+            from: () => ({ select: () => ({ eq: () => ({ order: async () => ({ data: null }), single: async () => ({ data: null }) }) }), upsert: async () => ({}) })
+        };
+    }
+    let currentUser = null;
+
     // --- STATE ---
     let appState = {
         measurements: JSON.parse(localStorage.getItem('omegahrv_measurements')) || [],
@@ -714,10 +783,83 @@
     let chartSpark = null;
     let chartHistory = null;
 
-    // --- INITIALIZATION ---
-    document.addEventListener("DOMContentLoaded", () => {
-        if (!navigator.bluetooth) {
-            document.getElementById('ble-unsupported').style.display = 'block';
+    // --- SYNC STATUS UI ---
+    function setSyncStatus(state, label) {
+        let el = document.getElementById('sync-status');
+        if(!el) return;
+        el.style.display = 'flex';
+        el.className = 'sync-indicator ' + state;
+        document.getElementById('sync-label').textContent = label || state;
+    }
+
+    // --- AUTH LOGIC ---
+    let authMode = 'signin'; // 'signin' or 'signup'
+
+    function toggleAuthMode() {
+        authMode = authMode === 'signin' ? 'signup' : 'signin';
+        document.getElementById('auth-title').textContent = authMode === 'signin' ? 'Sign In' : 'Create Account';
+        document.getElementById('auth-submit-btn').textContent = authMode === 'signin' ? 'Sign In' : 'Sign Up';
+        document.getElementById('auth-toggle').innerHTML = authMode === 'signin'
+            ? "Don't have an account? <span>Sign Up</span>"
+            : "Already have an account? <span>Sign In</span>";
+        document.getElementById('auth-error').textContent = '';
+    }
+
+    async function handleAuth() {
+        let email = document.getElementById('auth-email').value.trim();
+        let password = document.getElementById('auth-password').value;
+        let errEl = document.getElementById('auth-error');
+        errEl.textContent = '';
+
+        if(!email || !password) { errEl.textContent = 'Please enter email and password.'; return; }
+        if(password.length < 6) { errEl.textContent = 'Password must be at least 6 characters.'; return; }
+
+        document.getElementById('auth-submit-btn').disabled = true;
+        document.getElementById('auth-submit-btn').textContent = 'Loading...';
+
+        try {
+            let result;
+            if(authMode === 'signup') {
+                result = await sbClient.auth.signUp({ email, password });
+            } else {
+                result = await sbClient.auth.signInWithPassword({ email, password });
+            }
+
+            if(result.error) throw result.error;
+
+            if(authMode === 'signup' && result.data.user && !result.data.session) {
+                errEl.style.color = 'var(--success)';
+                errEl.textContent = 'Check your email to confirm your account.';
+                document.getElementById('auth-submit-btn').disabled = false;
+                document.getElementById('auth-submit-btn').textContent = authMode === 'signin' ? 'Sign In' : 'Sign Up';
+                return;
+            }
+
+            currentUser = result.data.user;
+            document.getElementById('modal-auth').classList.remove('active');
+            await onAuthSuccess();
+        } catch(e) {
+            errEl.textContent = e.message || 'Authentication failed.';
+        }
+        document.getElementById('auth-submit-btn').disabled = false;
+        document.getElementById('auth-submit-btn').textContent = authMode === 'signin' ? 'Sign In' : 'Sign Up';
+    }
+
+    async function logOut() {
+        await sbClient.auth.signOut();
+        currentUser = null;
+        setSyncStatus('offline', 'Logged out');
+        document.getElementById('modal-auth').classList.add('active');
+    }
+
+    async function onAuthSuccess() {
+        setSyncStatus('syncing', 'Syncing...');
+        try {
+            await syncDown();
+            setSyncStatus('synced', 'Synced');
+        } catch(e) {
+            console.error('Sync down failed:', e);
+            setSyncStatus('error', 'Sync error');
         }
 
         if (!appState.onboarded) {
@@ -725,15 +867,179 @@
         } else {
             initApp();
         }
+        applySettingsToUI();
+    }
 
-        // Apply settings
+    // --- CLOUD SYNC ---
+    async function syncDown() {
+        if(!currentUser) return;
+
+        // 1. Pull measurements
+        let { data: meas } = await sbClient.from('measurements').select('*').eq('user_id', currentUser.id).order('date', { ascending: true });
+        if(meas && meas.length > 0) {
+            appState.measurements = meas.map(m => ({
+                id: m.id,
+                date: m.date,
+                readiness: Number(m.readiness),
+                rmssd: Number(m.rmssd),
+                sdnn: Number(m.sdnn),
+                pnn50: Number(m.pnn50),
+                meanHR: Number(m.mean_hr),
+                stressIndex: Number(m.stress_index),
+                rrCount: m.rr_count
+            }));
+            localStorage.setItem('omegahrv_measurements', JSON.stringify(appState.measurements));
+        }
+
+        // 2. Pull sessions
+        let { data: sess } = await sbClient.from('sessions').select('*').eq('user_id', currentUser.id).order('date', { ascending: false });
+        if(sess && sess.length > 0) {
+            appState.sessions = sess.map(s => ({
+                id: s.id,
+                date: s.date,
+                time: s.time,
+                title: s.title,
+                type: s.type,
+                rpe: s.rpe,
+                notes: s.notes,
+                readinessScore: s.readiness_score,
+                hasPB: s.has_pb,
+                pbDetails: s.pb_details || [],
+                running: s.running_data,
+                lifting: s.lifting_data,
+                other: s.other_data
+            }));
+            localStorage.setItem('omegahrv_sessions', JSON.stringify(appState.sessions));
+        }
+
+        // 3. Pull profile (settings + PBs)
+        let { data: prof } = await sbClient.from('profiles').select('*').eq('user_id', currentUser.id).single();
+        if(prof) {
+            if(prof.settings) {
+                appState.settings = prof.settings;
+                localStorage.setItem('omegahrv_settings', JSON.stringify(appState.settings));
+                appState.onboarded = true;
+                localStorage.setItem('omegahrv_onboarded', 'true');
+            }
+            if(prof.personal_bests) {
+                appState.personalBests = prof.personal_bests;
+                localStorage.setItem('omegahrv_pbs', JSON.stringify(appState.personalBests));
+            }
+        }
+    }
+
+    async function pushMeasurement(m) {
+        if(!currentUser) return;
+        setSyncStatus('syncing', 'Saving...');
+        try {
+            await sbClient.from('measurements').upsert({
+                id: m.id || crypto.randomUUID(),
+                user_id: currentUser.id,
+                date: m.date,
+                readiness: m.readiness,
+                rmssd: m.rmssd,
+                sdnn: m.sdnn,
+                pnn50: m.pnn50,
+                mean_hr: m.meanHR,
+                stress_index: m.stressIndex,
+                rr_count: m.rrCount
+            });
+            setSyncStatus('synced', 'Synced');
+        } catch(e) { console.error(e); setSyncStatus('error', 'Sync error'); }
+    }
+
+    async function pushSession(s) {
+        if(!currentUser) return;
+        setSyncStatus('syncing', 'Saving...');
+        try {
+            await sbClient.from('sessions').upsert({
+                id: s.id,
+                user_id: currentUser.id,
+                date: s.date,
+                time: s.time,
+                title: s.title,
+                type: s.type,
+                rpe: s.rpe,
+                notes: s.notes,
+                readiness_score: s.readinessScore,
+                has_pb: s.hasPB,
+                pb_details: s.pbDetails,
+                running_data: s.running || null,
+                lifting_data: s.lifting || null,
+                other_data: s.other || null
+            });
+            setSyncStatus('synced', 'Synced');
+        } catch(e) { console.error(e); setSyncStatus('error', 'Sync error'); }
+    }
+
+    async function pushProfile() {
+        if(!currentUser) return;
+        setSyncStatus('syncing', 'Saving...');
+        try {
+            await sbClient.from('profiles').upsert({
+                user_id: currentUser.id,
+                settings: appState.settings,
+                personal_bests: appState.personalBests,
+                updated_at: new Date().toISOString()
+            });
+            setSyncStatus('synced', 'Synced');
+        } catch(e) { console.error(e); setSyncStatus('error', 'Sync error'); }
+    }
+
+    async function forceCloudSync() {
+        if(!currentUser) { alert('Not logged in.'); return; }
+        setSyncStatus('syncing', 'Full sync...');
+        try {
+            // Push everything local to cloud
+            await pushProfile();
+            for(let m of appState.measurements) { await pushMeasurement(m); }
+            for(let s of appState.sessions) { await pushSession(s); }
+            // Then pull to reconcile
+            await syncDown();
+            initApp();
+            setSyncStatus('synced', 'Synced');
+            alert('Cloud sync complete.');
+        } catch(e) {
+            console.error(e);
+            setSyncStatus('error', 'Sync error');
+            alert('Sync failed: ' + e.message);
+        }
+    }
+
+    // --- INITIALIZATION ---
+    document.addEventListener("DOMContentLoaded", async () => {
+        if (!navigator.bluetooth) {
+            document.getElementById('ble-unsupported').style.display = 'block';
+        }
+
+        // Check existing Supabase session
+        let hasSession = false;
+        try {
+            const { data, error } = await sbClient.auth.getSession();
+            if(!error && data?.session?.user) {
+                currentUser = data.session.user;
+                hasSession = true;
+                await onAuthSuccess();
+            }
+        } catch(e) {
+            console.warn('Supabase session check failed:', e);
+        }
+
+        if(!hasSession) {
+            document.getElementById('modal-auth').classList.add('active');
+            if(appState.onboarded) initApp();
+        }
+        applySettingsToUI();
+    });
+
+    function applySettingsToUI() {
         document.getElementById('set-name').value = appState.settings.name || '';
         document.getElementById('set-age').value = appState.settings.age || '';
         document.getElementById('set-init-duration').value = appState.settings.initDuration || '60';
         document.getElementById('set-duration').value = appState.settings.duration || '180';
         document.getElementById('set-theme').checked = appState.settings.lightMode;
         if(appState.settings.lightMode) document.body.classList.add('light-mode');
-    });
+    }
 
     function initApp() {
         renderDashboard();
@@ -751,6 +1057,7 @@
         localStorage.setItem('omegahrv_onboarded', 'true');
         appState.onboarded = true;
         document.getElementById('modal-onboard').classList.remove('active');
+        pushProfile(); // sync to cloud
         initApp();
     }
 
@@ -811,6 +1118,7 @@
         appState.settings.duration = document.getElementById('set-duration').value;
         appState.settings.lightMode = document.getElementById('set-theme').checked;
         localStorage.setItem('omegahrv_settings', JSON.stringify(appState.settings));
+        pushProfile(); // sync to cloud
         alert("Settings saved!");
     }
 
@@ -1242,8 +1550,10 @@
 
     function saveMeasurement() {
         if(!bleState.lastResult) return;
+        bleState.lastResult.id = crypto.randomUUID();
         appState.measurements.push(bleState.lastResult);
         localStorage.setItem('omegahrv_measurements', JSON.stringify(appState.measurements));
+        pushMeasurement(bleState.lastResult); // sync to cloud
         
         // Return to dashboard
         document.getElementById('measure-result').style.display = 'none';
@@ -1523,6 +1833,8 @@
         appState.sessions.sort((a,b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
         
         localStorage.setItem('omegahrv_sessions', JSON.stringify(appState.sessions));
+        pushSession(sess); // sync to cloud
+        if(sess.hasPB) pushProfile(); // PBs updated, sync profile too
         
         if(sess.hasPB) {
             confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, zIndex: 1000 });
