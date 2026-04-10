@@ -84,7 +84,7 @@
                         <span>Score</span>
                     </div>
                     <h3 id="dash-subtitle">Readiness</h3>
-                    <p id="dash-readiness-info" style="color: var(--text-muted); font-size: 0.8rem;">Compares today vs your baseline RMSSD. 70+ high, 40–69 moderate, below 40 low readiness.</p>
+                    <p id="dash-readiness-info" style="color: var(--text-muted); font-size: 0.8rem;">Compares today vs your baseline RMSSD; these are interpretation bands: 70+ high, 40–69 moderate, below 40 low readiness.</p>
                 </div>
                 <div class="stat-grid">
                     <div class="card">
@@ -203,9 +203,9 @@
                     <label for="log-rpe" style="font-size: 0.85rem; color: var(--text-muted);">Session RPE (1-10)</label>
                     <output id="log-rpe-val" style="width: 20px; text-align: right;">5</output>
                 </div>
-                <input type="range" id="log-rpe" min="1" max="10" value="5" oninput="document.getElementById('log-rpe-val').value = this.value">
+                <input type="range" id="log-rpe" min="1" max="10" value="5" aria-describedby="log-rpe-guide" oninput="document.getElementById('log-rpe-val').value = this.value">
                 <div class="rpe-scale" aria-hidden="true"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span></div>
-                <p style="font-size: 0.75rem; color: var(--text-muted);">Borg CR10 guide: 1–2 very easy, 5 moderate, 8 hard, 10 maximal.</p>
+                <p id="log-rpe-guide" style="font-size: 0.75rem; color: var(--text-muted);">Borg CR10 guide: 1–2 very easy, 5 moderate, 8 hard, 10 maximal.</p>
                 <label for="log-notes" style="font-size: 0.85rem; color: var(--text-muted);">Notes</label>
                 <textarea id="log-notes" rows="2" placeholder="Session notes..."></textarea>
                 <div id="log-readiness-badge" class="badge" style="display: none; align-self: flex-start; margin-top: 5px;"></div>

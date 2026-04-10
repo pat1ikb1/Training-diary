@@ -1,4 +1,5 @@
     // --- SUPABASE CLIENT ---
+    // Runtime config expected from hosting shell (e.g. set in a small config script before app.js).
     const SUPABASE_URL = window.__SUPABASE_URL__ || '';
     const SUPABASE_KEY = window.__SUPABASE_ANON_KEY__ || '';
     let sbClient = null;
@@ -1730,4 +1731,3 @@
             }
         });
     }
-
