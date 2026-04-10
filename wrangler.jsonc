@@ -1,7 +1,8 @@
 {
+  "$schema": "node_modules/wrangler/config-schema.json",
   "name": "trainingdiary",
-  "main": "src/index.js",
   "compatibility_date": "2026-04-10",
+  "main": "src/index.js",
   "assets": {
     "directory": "./public"
   }
