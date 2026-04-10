@@ -1,0 +1,8 @@
+{
+  "name": "trainingdiary",
+  "main": "src/index.js",
+  "compatibility_date": "2026-04-10",
+  "assets": {
+    "directory": "./public"
+  }
+}
