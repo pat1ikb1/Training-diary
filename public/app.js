@@ -1568,6 +1568,11 @@
         currentCalYear = year; currentCalMonth = month;
         let c = document.getElementById('calendar-days');
         c.innerHTML = '';
+        let detCT = document.getElementById('calendar-day-details');
+        if(detCT) {
+            detCT.innerHTML = '';
+            detCT.style.display = 'none';
+        }
         let monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
         document.getElementById('calendar-header').innerText = `${monthNames[month]} ${year}`;
         
@@ -1618,32 +1623,26 @@
     }
 
     function openDayModal(date, om, sessions) {
-        let ol = document.createElement('div');
-        ol.className = 'modal-overlay active';
-        const card = document.createElement('div');
-        card.className = 'modal-card';
+        let container = document.getElementById('calendar-day-details');
+        if (!container) return;
+        container.innerHTML = '';
+        container.style.display = 'flex';
 
-        const closeBtn = document.createElement('button');
-        closeBtn.style.position = 'absolute';
-        closeBtn.style.top = '10px';
-        closeBtn.style.right = '10px';
-        closeBtn.style.border = 'none';
-        closeBtn.style.background = 'none';
-        closeBtn.style.fontSize = '1.5rem';
-        closeBtn.style.color = 'var(--text-main)';
-        closeBtn.setAttribute('aria-label', 'Close day details');
-        closeBtn.textContent = '×';
-        closeBtn.onclick = () => ol.remove();
-        card.appendChild(closeBtn);
+        const card = document.createElement('div');
+        card.className = 'card';
 
         const title = document.createElement('h2');
-        title.textContent = date;
+        title.style.fontSize = '1.1rem';
+        title.style.borderBottom = '1px solid var(--border)';
+        title.style.paddingBottom = '8px';
+        title.style.marginBottom = '8px';
+        title.textContent = "Details for " + date;
         card.appendChild(title);
 
         if (om) {
             const metricsCard = document.createElement('div');
             metricsCard.className = 'card';
-            metricsCard.style.background = 'var(--card)';
+            metricsCard.style.background = 'var(--bg)';
             metricsCard.style.fontSize = '0.85rem';
             const strong = document.createElement('strong');
             strong.style.fontSize = '1rem';
@@ -1709,8 +1708,10 @@
                 card.appendChild(row);
             });
         }
-        ol.appendChild(card);
-        document.body.appendChild(ol);
+        container.appendChild(card);
+        
+        // Scroll to details on narrow screens smoothly
+        container.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }
 
     let logSparkChartInst = null;
