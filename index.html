@@ -426,7 +426,7 @@
                         <span>Score</span>
                     </div>
                     <h3 id="dash-subtitle">Readiness</h3>
-                    <p id="dash-readiness-info" style="color: var(--text-muted); font-size: 0.8rem;" title="Readiness compares today’s RMSSD against your recent baseline. 70+ high readiness, 40–69 moderate, below 40 low readiness.">Compares today vs your baseline RMSSD.</p>
+                    <p id="dash-readiness-info" style="color: var(--text-muted); font-size: 0.8rem;">Compares today vs your baseline RMSSD. 70+ high, 40–69 moderate, below 40 low readiness.</p>
                 </div>
                 <div class="stat-grid">
                     <div class="card">
@@ -773,8 +773,8 @@
 
 <script>
     // --- SUPABASE CLIENT ---
-    const SUPABASE_URL = window.__SUPABASE_URL__ || localStorage.getItem('omegahrv_supabase_url') || '';
-    const SUPABASE_KEY = window.__SUPABASE_ANON_KEY__ || localStorage.getItem('omegahrv_supabase_anon_key') || '';
+    const SUPABASE_URL = window.__SUPABASE_URL__ || '';
+    const SUPABASE_KEY = window.__SUPABASE_ANON_KEY__ || '';
     let sbClient = null;
     try {
         const { createClient } = window.supabase;
@@ -811,23 +811,25 @@
 
     const qs = (sel, ctx=document) => ctx.querySelector(sel);
     const qsa = (sel, ctx=document) => [...ctx.querySelectorAll(sel)];
-    const escapeHTML = (s) => String(s ?? '');
 
     let toastTimer = null;
     function showToast(message, level = 'success') {
+        const safeLevel = ['success', 'warning', 'danger'].includes(level) ? level : 'success';
+        const safeMessage = String(message ?? '').replace(/[\u0000-\u001F\u007F]/g, ' ').slice(0, 240);
         let toast = document.getElementById('app-toast');
         if (!toast) return;
-        toast.className = `banner toast-${level}`;
-        toast.textContent = message;
+        toast.className = `banner toast-${safeLevel}`;
+        toast.textContent = safeMessage;
         toast.classList.add('show');
         clearTimeout(toastTimer);
         toastTimer = setTimeout(() => toast.classList.remove('show'), 2500);
     }
 
     function showConfirm(message, options = {}) {
-        const title = options.title || 'Confirm action';
-        const confirmText = options.confirmText || 'Confirm';
-        const cancelText = options.cancelText || 'Cancel';
+        const title = String(options.title || 'Confirm action');
+        const confirmText = String(options.confirmText || 'Confirm');
+        const cancelText = String(options.cancelText || 'Cancel');
+        const messageText = String(message || '');
         return new Promise((resolve) => {
             const modal = document.getElementById('modal-confirm');
             const titleEl = document.getElementById('confirm-title');
@@ -836,7 +838,7 @@
             const cancelBtn = document.getElementById('confirm-cancel-btn');
             if (!modal || !titleEl || !msgEl || !okBtn || !cancelBtn) return resolve(false);
             titleEl.textContent = title;
-            msgEl.textContent = message;
+            msgEl.textContent = messageText;
             okBtn.textContent = confirmText;
             cancelBtn.textContent = cancelText;
             modal.classList.add('active');
@@ -860,8 +862,36 @@
         }
     }
 
+    function stableHash(str) {
+        let hash = 5381;
+        for (let i = 0; i < str.length; i++) hash = ((hash << 5) + hash) ^ str.charCodeAt(i);
+        return Math.abs(hash >>> 0).toString(16);
+    }
+
+    function fallbackEntityId(item, prefix = 'legacy') {
+        const raw = [
+            item?.date || '',
+            item?.time || '',
+            item?.title || '',
+            item?.type || '',
+            item?.rmssd || '',
+            item?.meanHR || '',
+            item?.pnn50 || '',
+            item?.rrCount || '',
+            item?.updatedAt || item?.updated_at || ''
+        ].join('|');
+        return `${prefix}-${stableHash(raw)}`;
+    }
+
     function fallbackMeasurementId(m) {
-        return m.id || `legacy-${m.date || ''}-${m.rmssd || ''}-${m.meanHR || ''}`;
+        return m.id || fallbackEntityId(m, 'measurement');
+    }
+
+    function sessionIdValue(s) {
+        if (s.id) return s.id;
+        if (s._stableId) return s._stableId;
+        s._stableId = fallbackEntityId(s, 'session');
+        return s._stableId;
     }
     
     function toggleSidebar() {
@@ -983,14 +1013,13 @@
         return Number.isFinite(val) ? val : 0;
     }
 
-    function mergeByLatest(localArr, cloudArr) {
+    function mergeByLatest(localArr, cloudArr, prefix = 'legacy') {
         const merged = new Map();
         [...localArr, ...cloudArr].forEach((item) => {
-            const fallbackId = `legacy-${item?.date || ''}-${item?.time || ''}-${item?.title || ''}-${item?.rmssd || ''}-${item?.meanHR || ''}`;
-            const id = item.id || fallbackId;
+            const id = item.id || fallbackEntityId(item, prefix);
             const current = merged.get(id);
             const normalized = { ...item, id };
-            if (!current || tsValue(normalized) >= tsValue(current)) merged.set(id, normalized);
+            if (!current || tsValue(normalized) > tsValue(current)) merged.set(id, normalized);
         });
         return [...merged.values()];
     }
@@ -1013,7 +1042,7 @@
                 rrCount: m.rr_count,
                 updatedAt: m.updated_at || m.date
             }));
-            appState.measurements = mergeByLatest(appState.measurements, cloudMeasurements).sort((a,b) => a.date.localeCompare(b.date));
+            appState.measurements = mergeByLatest(appState.measurements, cloudMeasurements, 'measurement').sort((a,b) => a.date.localeCompare(b.date));
             localStorage.setItem('omegahrv_measurements', JSON.stringify(appState.measurements));
         }
 
@@ -1036,7 +1065,7 @@
                 other: s.other_data,
                 updatedAt: s.updated_at || `${s.date}T${s.time || '00:00'}:00Z`
             }));
-            appState.sessions = mergeByLatest(appState.sessions, cloudSessions).sort((a,b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
+            appState.sessions = mergeByLatest(appState.sessions, cloudSessions, 'session').sort((a,b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
             localStorage.setItem('omegahrv_sessions', JSON.stringify(appState.sessions));
         }
 
@@ -1061,7 +1090,6 @@
         setSyncStatus('syncing', 'Saving...');
         try {
             const measurementId = fallbackMeasurementId(m);
-            m.id = measurementId;
             await sbClient.from('measurements').upsert({
                 id: measurementId,
                 user_id: currentUser.id,
@@ -1141,7 +1169,7 @@
             }
             if (appState.sessions.length) {
                 await sbClient.from('sessions').upsert(appState.sessions.map(s => ({
-                    id: s.id || crypto.randomUUID(),
+                    id: sessionIdValue(s),
                     user_id: currentUser.id,
                     date: s.date,
                     time: s.time,
@@ -1712,10 +1740,14 @@
     }
 
     function calcReadiness(rmssd) {
+        // Use a wider baseline (28 days) so score is less noisy day-to-day.
         let baselineWindow = appState.measurements.slice(-28);
         if (baselineWindow.length === 0) return 50;
         let baseline = baselineWindow.reduce((sum, m) => sum + m.rmssd, 0) / baselineWindow.length;
+        if (!baseline || baseline <= 0) return 50;
+        // Confidence ramps up during first week: start near neutral (50), then trust baseline more.
         let confidenceFactor = Math.min(1, baselineWindow.length / 7);
+        // 70 anchors "equal to baseline" to an actionable-but-not-max readiness zone.
         let raw = (rmssd / baseline) * 70;
         let score = raw * confidenceFactor + (50 * (1 - confidenceFactor));
         return Math.max(0, Math.min(100, Math.round(score)));
@@ -2187,7 +2219,7 @@
             delBtn.style.minHeight = 'unset';
             delBtn.style.display = 'inline';
             delBtn.textContent = 'Delete';
-            delBtn.dataset.sessionId = s.id;
+            delBtn.dataset.sessionId = sessionIdValue(s);
             delBtn.className = 'delete-session-btn';
 
             el.appendChild(header);
@@ -2200,7 +2232,7 @@
     window.deleteSession = async function(id) {
         const confirmed = await showConfirm("Delete this session forever?", { title: 'Delete session', confirmText: 'Delete' });
         if(confirmed) {
-            appState.sessions = appState.sessions.filter(s => s.id !== id);
+            appState.sessions = appState.sessions.filter(s => sessionIdValue(s) !== id);
             localStorage.setItem('omegahrv_sessions', JSON.stringify(appState.sessions));
             if (currentUser) {
                 try {
