@@ -1,7 +1,7 @@
     // --- SUPABASE CLIENT ---
     // Runtime config expected from hosting shell (e.g. set in a small config script before app.js).
-    const SUPABASE_URL = window.__SUPABASE_URL__ || '';
-    const SUPABASE_KEY = window.__SUPABASE_ANON_KEY__ || '';
+    const SUPABASE_URL = window.__SUPABASE_URL__ || 'https://lkbexgqclzodqllfemix.supabase.co';
+    const SUPABASE_KEY = window.__SUPABASE_ANON_KEY__ || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxrYmV4Z3FjbHpvZHFsbGZlbWl4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU3NjE3NjEsImV4cCI6MjA5MTMzNzc2MX0.LikIfvtMf-XlU9SAb1j-uBpKxn93p724AIoqfnG9B-E';
     let sbClient = null;
     try {
         const { createClient } = window.supabase;
