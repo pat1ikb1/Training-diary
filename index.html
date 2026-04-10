@@ -30,6 +30,11 @@
             --text-main: #24292f;
             --text-muted: #57606a;
             --border: #d0d7de;
+            --accent: #007a6b;
+            --accent-dim: rgba(0, 122, 107, 0.15);
+            --danger: #b42318;
+            --warning: #9a6700;
+            --success: #1f883d;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
@@ -90,6 +95,12 @@
             display: flex; align-items: center; gap: 12px;
             padding: 12px 20px; color: var(--text-muted); cursor: pointer; text-decoration: none;
             font-size: 0.95rem; font-weight: 500; transition: color 0.2s, background 0.2s;
+            background: none;
+            border: none;
+            width: 100%;
+            min-height: unset;
+            justify-content: flex-start;
+            border-radius: 0;
         }
         .nav-item:hover { background: rgba(255,255,255,0.05); }
         .nav-item.active { color: var(--accent); background: rgba(0, 201, 177, 0.1); border-right: 3px solid var(--accent); }
@@ -262,7 +273,11 @@
         .modal-card {
             background: var(--bg); padding: 24px; border-radius: 20px; width: 90%; max-width: 400px;
             display: flex; flex-direction: column; gap: 16px; border: 1px solid var(--border);
+            position: relative;
         }
+
+        .modal-actions { display: flex; gap: 10px; }
+        .modal-actions button { flex: 1; }
 
         /* Banner */
         .banner {
@@ -272,6 +287,10 @@
             transform: translateY(-150%); transition: transform 0.3s;
         }
         .banner.show { transform: translateY(0); }
+
+        .banner.toast-success { background: var(--success); }
+        .banner.toast-warning { background: var(--warning); color: #fff; }
+        .banner.toast-danger { background: var(--danger); }
 
         /* Training Diary Ext */
         .segmented-control { display: flex; background: var(--card); border-radius: 8px; padding: 4px; border: 1px solid var(--border); margin-bottom: 15px; }
@@ -311,6 +330,9 @@
         .split-kin-body input { font-size: 0.8rem; padding: 6px 8px; min-height: 32px; }
         .kin-toggle-btn { background: none; border: none; color: var(--text-muted); font-size: 0.7rem; padding: 2px 6px; min-height: unset; width: auto; cursor: pointer; white-space: nowrap; }
         .kin-toggle-btn:hover { color: var(--accent); }
+        .rpe-scale { display: grid; grid-template-columns: repeat(10, 1fr); font-size: 0.7rem; color: var(--text-muted); margin-top: 4px; }
+        .rpe-scale span { text-align: center; }
+        .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; white-space: nowrap; }
 
         @keyframes pb-flash-anim { 0% { background-color: var(--card); } 20% { background-color: rgba(35, 134, 54, 0.4); } 100% { background-color: var(--card); } }
         .pb-flash { animation: pb-flash-anim 1.2s ease; }
@@ -346,7 +368,7 @@
                 <svg viewBox="0 0 24 24"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
                 <span id="sync-label">Synced</span>
             </div>
-            <button id="hamburger-btn" onclick="toggleSidebar()">
+            <button id="hamburger-btn" aria-label="Toggle navigation menu" onclick="toggleSidebar()">
                 <svg viewBox="0 0 24 24"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
             </button>
         </div>
@@ -356,34 +378,34 @@
 
     <div class="app-layout">
         <aside id="sidebar">
-            <a class="nav-item active" onclick="switchTab('dashboard', this)">
+            <button type="button" class="nav-item active" onclick="switchTab('dashboard', this)">
                 <svg viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
                 <span>Dashboard</span>
-            </a>
-            <a class="nav-item" onclick="switchTab('measure', this)">
+            </button>
+            <button type="button" class="nav-item" onclick="switchTab('measure', this)">
                 <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
                 <span>Measure</span>
-            </a>
-            <a class="nav-item" onclick="switchTab('log', this)">
+            </button>
+            <button type="button" class="nav-item" onclick="switchTab('log', this)">
                 <svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
                 <span>Log</span>
-            </a>
-            <a class="nav-item" onclick="switchTab('prs', this)">
+            </button>
+            <button type="button" class="nav-item" onclick="switchTab('prs', this)">
                 <svg viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
                 <span>PRs</span>
-            </a>
-            <a class="nav-item" onclick="switchTab('calendar', this)">
+            </button>
+            <button type="button" class="nav-item" onclick="switchTab('calendar', this)">
                 <svg viewBox="0 0 24 24"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11z"/></svg>
                 <span>Calendar</span>
-            </a>
-            <a class="nav-item" onclick="switchTab('history', this)">
+            </button>
+            <button type="button" class="nav-item" onclick="switchTab('history', this)">
                 <svg viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/><path d="M12.5 7H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>
                 <span>History</span>
-            </a>
-            <a class="nav-item" style="margin-top:auto;" onclick="switchTab('settings', this)">
+            </button>
+            <button type="button" class="nav-item" style="margin-top:auto;" onclick="switchTab('settings', this)">
                 <svg viewBox="0 0 24 24"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.06-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.44,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.73,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.06,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.49-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
                 <span>Settings</span>
-            </a>
+            </button>
         </aside>
 
         <div class="view-container" id="view-container">
@@ -404,6 +426,7 @@
                         <span>Score</span>
                     </div>
                     <h3 id="dash-subtitle">Readiness</h3>
+                    <p id="dash-readiness-info" style="color: var(--text-muted); font-size: 0.8rem;" title="Readiness compares today’s RMSSD against your recent baseline. 70+ high readiness, 40–69 moderate, below 40 low readiness.">Compares today vs your baseline RMSSD.</p>
                 </div>
                 <div class="stat-grid">
                     <div class="card">
@@ -507,15 +530,25 @@
 
             <div class="card" id="log-form-base">
                 <div class="card-row">
-                    <input type="date" id="log-date" style="flex:1;" onchange="checkLogReadiness()">
-                    <input type="time" id="log-time" style="flex:1;" value="12:00">
+                    <div style="flex:1;">
+                        <label for="log-date" style="font-size: 0.75rem; color: var(--text-muted);">Date</label>
+                        <input type="date" id="log-date" style="flex:1;" onchange="checkLogReadiness()">
+                    </div>
+                    <div style="flex:1;">
+                        <label for="log-time" style="font-size: 0.75rem; color: var(--text-muted);">Time</label>
+                        <input type="time" id="log-time" style="flex:1;" value="12:00">
+                    </div>
                 </div>
+                <label for="log-title" style="font-size: 0.85rem; color: var(--text-muted);">Session title</label>
                 <input type="text" id="log-title" placeholder="Session Title...">
                 <div class="card-row">
-                    <label style="font-size: 0.85rem; color: var(--text-muted);">Session RPE (1-10)</label>
+                    <label for="log-rpe" style="font-size: 0.85rem; color: var(--text-muted);">Session RPE (1-10)</label>
                     <output id="log-rpe-val" style="width: 20px; text-align: right;">5</output>
                 </div>
                 <input type="range" id="log-rpe" min="1" max="10" value="5" oninput="document.getElementById('log-rpe-val').value = this.value">
+                <div class="rpe-scale" aria-hidden="true"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span></div>
+                <p style="font-size: 0.75rem; color: var(--text-muted);">Borg CR10 guide: 1–2 very easy, 5 moderate, 8 hard, 10 maximal.</p>
+                <label for="log-notes" style="font-size: 0.85rem; color: var(--text-muted);">Notes</label>
                 <textarea id="log-notes" rows="2" placeholder="Session notes..."></textarea>
                 <div id="log-readiness-badge" class="badge" style="display: none; align-self: flex-start; margin-top: 5px;"></div>
             </div>
@@ -654,20 +687,20 @@
         <div class="view" id="view-settings">
             <h2 style="font-size: 1.2rem;">Settings</h2>
             <div class="card">
-                <label style="font-size: 0.85rem; color: var(--text-muted);">Athlete Name</label>
+                <label for="set-name" style="font-size: 0.85rem; color: var(--text-muted);">Athlete Name</label>
                 <input type="text" id="set-name" placeholder="Name">
                 
-                <label style="font-size: 0.85rem; color: var(--text-muted); margin-top: 10px;">Age</label>
+                <label for="set-age" style="font-size: 0.85rem; color: var(--text-muted); margin-top: 10px;">Age</label>
                 <input type="number" id="set-age" placeholder="Age">
 
-                <label style="font-size: 0.85rem; color: var(--text-muted); margin-top: 10px;">Initialisation Phase</label>
+                <label for="set-init-duration" style="font-size: 0.85rem; color: var(--text-muted); margin-top: 10px;">Initialisation Phase</label>
                 <select id="set-init-duration">
                     <option value="0">Off (0s)</option>
                     <option value="30">30 Seconds</option>
                     <option value="60" selected>60 Seconds</option>
                 </select>
 
-                <label style="font-size: 0.85rem; color: var(--text-muted); margin-top: 10px;">Measurement Duration</label>
+                <label for="set-duration" style="font-size: 0.85rem; color: var(--text-muted); margin-top: 10px;">Measurement Duration</label>
                 <select id="set-duration">
                     <option value="60">1 Minute</option>
                     <option value="120">2 Minutes</option>
@@ -686,7 +719,7 @@
             <div class="card" style="margin-top: 20px;">
                 <span style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px;">Cloud Sync</span>
                 <button onclick="forceCloudSync()" style="margin-bottom: 8px;">⟳ Force Cloud Sync</button>
-                <button id="btn-logout" style="color: var(--warning); border-color: var(--warning);" onclick="logOut()">Log Out</button>
+                <button id="btn-logout" style="color: var(--warning); border-color: var(--warning);" onclick="requestLogOut()">Log Out</button>
             </div>
 
             <div class="card" style="margin-top: auto;">
@@ -726,14 +759,30 @@
         </div>
     </div>
 
+    <div class="banner" id="app-toast"></div>
+    <div class="modal-overlay" id="modal-confirm">
+        <div class="modal-card">
+            <h3 id="confirm-title">Confirm action</h3>
+            <p id="confirm-message" style="font-size: 0.9rem; color: var(--text-muted);"></p>
+            <div class="modal-actions">
+                <button id="confirm-cancel-btn">Cancel</button>
+                <button class="primary" id="confirm-ok-btn">Confirm</button>
+            </div>
+        </div>
+    </div>
+
 <script>
     // --- SUPABASE CLIENT ---
-    const SUPABASE_URL = 'https://lkbexgqclzodqllfemix.supabase.co';
-    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxrYmV4Z3FjbHpvZHFsbGZlbWl4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU3NjE3NjEsImV4cCI6MjA5MTMzNzc2MX0.LikIfvtMf-XlU9SAb1j-uBpKxn93p724AIoqfnG9B-E';
+    const SUPABASE_URL = window.__SUPABASE_URL__ || localStorage.getItem('omegahrv_supabase_url') || '';
+    const SUPABASE_KEY = window.__SUPABASE_ANON_KEY__ || localStorage.getItem('omegahrv_supabase_anon_key') || '';
     let sbClient = null;
     try {
         const { createClient } = window.supabase;
-        sbClient = createClient(SUPABASE_URL, SUPABASE_KEY);
+        if (SUPABASE_URL && SUPABASE_KEY) {
+            sbClient = createClient(SUPABASE_URL, SUPABASE_KEY);
+        } else {
+            console.warn('Supabase config missing. Set window.__SUPABASE_URL__ and window.__SUPABASE_ANON_KEY__.');
+        }
     } catch(e) {
         console.warn('Supabase init failed:', e);
     }
@@ -762,6 +811,58 @@
 
     const qs = (sel, ctx=document) => ctx.querySelector(sel);
     const qsa = (sel, ctx=document) => [...ctx.querySelectorAll(sel)];
+    const escapeHTML = (s) => String(s ?? '');
+
+    let toastTimer = null;
+    function showToast(message, level = 'success') {
+        let toast = document.getElementById('app-toast');
+        if (!toast) return;
+        toast.className = `banner toast-${level}`;
+        toast.textContent = message;
+        toast.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toast.classList.remove('show'), 2500);
+    }
+
+    function showConfirm(message, options = {}) {
+        const title = options.title || 'Confirm action';
+        const confirmText = options.confirmText || 'Confirm';
+        const cancelText = options.cancelText || 'Cancel';
+        return new Promise((resolve) => {
+            const modal = document.getElementById('modal-confirm');
+            const titleEl = document.getElementById('confirm-title');
+            const msgEl = document.getElementById('confirm-message');
+            const okBtn = document.getElementById('confirm-ok-btn');
+            const cancelBtn = document.getElementById('confirm-cancel-btn');
+            if (!modal || !titleEl || !msgEl || !okBtn || !cancelBtn) return resolve(false);
+            titleEl.textContent = title;
+            msgEl.textContent = message;
+            okBtn.textContent = confirmText;
+            cancelBtn.textContent = cancelText;
+            modal.classList.add('active');
+
+            const close = (result) => {
+                modal.classList.remove('active');
+                okBtn.removeEventListener('click', onOk);
+                cancelBtn.removeEventListener('click', onCancel);
+                resolve(result);
+            };
+            const onOk = () => close(true);
+            const onCancel = () => close(false);
+            okBtn.addEventListener('click', onOk, { once: true });
+            cancelBtn.addEventListener('click', onCancel, { once: true });
+        });
+    }
+
+    function destroyChartSafe(chartRefName) {
+        if (chartRefName && typeof chartRefName.destroy === 'function') {
+            try { chartRefName.destroy(); } catch (e) { console.warn('Chart destroy failed', e); }
+        }
+    }
+
+    function fallbackMeasurementId(m) {
+        return m.id || `legacy-${m.date || ''}-${m.rmssd || ''}-${m.meanHR || ''}`;
+    }
     
     function toggleSidebar() {
         document.getElementById('sidebar').classList.toggle('open');
@@ -852,6 +953,11 @@
         document.getElementById('modal-auth').classList.add('active');
     }
 
+    async function requestLogOut() {
+        const confirmed = await showConfirm('Log out now? You will need to sign in again to sync data.', { title: 'Log out', confirmText: 'Log out' });
+        if (confirmed) await logOut();
+    }
+
     async function onAuthSuccess() {
         setSyncStatus('syncing', 'Syncing...');
         try {
@@ -871,13 +977,31 @@
     }
 
     // --- CLOUD SYNC ---
+    function tsValue(item) {
+        const stamp = item?.updatedAt || item?.updated_at || item?.date || '';
+        const val = new Date(stamp).getTime();
+        return Number.isFinite(val) ? val : 0;
+    }
+
+    function mergeByLatest(localArr, cloudArr) {
+        const merged = new Map();
+        [...localArr, ...cloudArr].forEach((item) => {
+            const fallbackId = `legacy-${item?.date || ''}-${item?.time || ''}-${item?.title || ''}-${item?.rmssd || ''}-${item?.meanHR || ''}`;
+            const id = item.id || fallbackId;
+            const current = merged.get(id);
+            const normalized = { ...item, id };
+            if (!current || tsValue(normalized) >= tsValue(current)) merged.set(id, normalized);
+        });
+        return [...merged.values()];
+    }
+
     async function syncDown() {
         if(!currentUser) return;
 
         // 1. Pull measurements
         let { data: meas } = await sbClient.from('measurements').select('*').eq('user_id', currentUser.id).order('date', { ascending: true });
         if(meas && meas.length > 0) {
-            appState.measurements = meas.map(m => ({
+            const cloudMeasurements = meas.map(m => ({
                 id: m.id,
                 date: m.date,
                 readiness: Number(m.readiness),
@@ -886,15 +1010,17 @@
                 pnn50: Number(m.pnn50),
                 meanHR: Number(m.mean_hr),
                 stressIndex: Number(m.stress_index),
-                rrCount: m.rr_count
+                rrCount: m.rr_count,
+                updatedAt: m.updated_at || m.date
             }));
+            appState.measurements = mergeByLatest(appState.measurements, cloudMeasurements).sort((a,b) => a.date.localeCompare(b.date));
             localStorage.setItem('omegahrv_measurements', JSON.stringify(appState.measurements));
         }
 
         // 2. Pull sessions
         let { data: sess } = await sbClient.from('sessions').select('*').eq('user_id', currentUser.id).order('date', { ascending: false });
         if(sess && sess.length > 0) {
-            appState.sessions = sess.map(s => ({
+            const cloudSessions = sess.map(s => ({
                 id: s.id,
                 date: s.date,
                 time: s.time,
@@ -907,8 +1033,10 @@
                 pbDetails: s.pb_details || [],
                 running: s.running_data,
                 lifting: s.lifting_data,
-                other: s.other_data
+                other: s.other_data,
+                updatedAt: s.updated_at || `${s.date}T${s.time || '00:00'}:00Z`
             }));
+            appState.sessions = mergeByLatest(appState.sessions, cloudSessions).sort((a,b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
             localStorage.setItem('omegahrv_sessions', JSON.stringify(appState.sessions));
         }
 
@@ -932,8 +1060,10 @@
         if(!currentUser) return;
         setSyncStatus('syncing', 'Saving...');
         try {
+            const measurementId = fallbackMeasurementId(m);
+            m.id = measurementId;
             await sbClient.from('measurements').upsert({
-                id: m.id || crypto.randomUUID(),
+                id: measurementId,
                 user_id: currentUser.id,
                 date: m.date,
                 readiness: m.readiness,
@@ -942,7 +1072,8 @@
                 pnn50: m.pnn50,
                 mean_hr: m.meanHR,
                 stress_index: m.stressIndex,
-                rr_count: m.rrCount
+                rr_count: m.rrCount,
+                updated_at: m.updatedAt || new Date().toISOString()
             });
             setSyncStatus('synced', 'Synced');
         } catch(e) { console.error(e); setSyncStatus('error', 'Sync error'); }
@@ -966,7 +1097,8 @@
                 pb_details: s.pbDetails,
                 running_data: s.running || null,
                 lifting_data: s.lifting || null,
-                other_data: s.other || null
+                other_data: s.other || null,
+                updated_at: s.updatedAt || new Date().toISOString()
             });
             setSyncStatus('synced', 'Synced');
         } catch(e) { console.error(e); setSyncStatus('error', 'Sync error'); }
@@ -987,22 +1119,54 @@
     }
 
     async function forceCloudSync() {
-        if(!currentUser) { alert('Not logged in.'); return; }
+        if(!currentUser) { showToast('Not logged in.', 'warning'); return; }
         setSyncStatus('syncing', 'Full sync...');
         try {
             // Push everything local to cloud
             await pushProfile();
-            for(let m of appState.measurements) { await pushMeasurement(m); }
-            for(let s of appState.sessions) { await pushSession(s); }
+            if (appState.measurements.length) {
+                await sbClient.from('measurements').upsert(appState.measurements.map(m => ({
+                    id: fallbackMeasurementId(m),
+                    user_id: currentUser.id,
+                    date: m.date,
+                    readiness: m.readiness,
+                    rmssd: m.rmssd,
+                    sdnn: m.sdnn,
+                    pnn50: m.pnn50,
+                    mean_hr: m.meanHR,
+                    stress_index: m.stressIndex,
+                    rr_count: m.rrCount,
+                    updated_at: m.updatedAt || new Date().toISOString()
+                })));
+            }
+            if (appState.sessions.length) {
+                await sbClient.from('sessions').upsert(appState.sessions.map(s => ({
+                    id: s.id || crypto.randomUUID(),
+                    user_id: currentUser.id,
+                    date: s.date,
+                    time: s.time,
+                    title: s.title,
+                    type: s.type,
+                    rpe: s.rpe,
+                    notes: s.notes,
+                    readiness_score: s.readinessScore,
+                    has_pb: s.hasPB,
+                    pb_details: s.pbDetails || [],
+                    running_data: s.running || null,
+                    lifting_data: s.lifting || null,
+                    other_data: s.other || null,
+                    updated_at: s.updatedAt || new Date().toISOString()
+                })));
+            }
             // Then pull to reconcile
             await syncDown();
             initApp();
             setSyncStatus('synced', 'Synced');
-            alert('Cloud sync complete.');
+            showToast('Cloud sync complete.', 'success');
         } catch(e) {
             console.error(e);
             setSyncStatus('error', 'Sync error');
-            alert('Sync failed: ' + e.message);
+            showToast('Sync failed: ' + e.message, 'danger');
         }
     }
 
@@ -1030,6 +1194,22 @@
             if(appState.onboarded) initApp();
         }
         applySettingsToUI();
+
+        const sessionList = document.getElementById('log-session-list');
+        if (sessionList) {
+            sessionList.addEventListener('click', (e) => {
+                const btn = e.target.closest('.delete-session-btn');
+                if (btn?.dataset.sessionId) deleteSession(btn.dataset.sessionId);
+            });
+        }
+
+        const historyList = document.getElementById('history-list');
+        if (historyList) {
+            historyList.addEventListener('click', (e) => {
+                const btn = e.target.closest('button[data-measurement-id]');
+                if (btn?.dataset.measurementId) deleteMeasurement(btn.dataset.measurementId);
+            });
+        }
     });
 
     function applySettingsToUI() {
@@ -1119,7 +1299,7 @@
         appState.settings.lightMode = document.getElementById('set-theme').checked;
         localStorage.setItem('omegahrv_settings', JSON.stringify(appState.settings));
         pushProfile(); // sync to cloud
-        alert("Settings saved!");
+        showToast("Settings saved!", 'success');
     }
 
     // --- DASHBOARD RENDER ---
@@ -1172,7 +1352,7 @@
         const labels = recent.map(m => new Date(m.date).toLocaleDateString(undefined, { weekday: 'short' }));
         const data = recent.map(m => m.rmssd);
 
-        if (chartSpark) chartSpark.destroy();
+        destroyChartSafe(chartSpark);
         chartSpark = new Chart(ctx, {
             type: 'line',
             data: {
@@ -1212,19 +1392,47 @@
         [...recent30].reverse().forEach(m => {
             const dateStr = new Date(m.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
             let dotColor = m.rmssd >= 40 ? 'var(--success)' : m.rmssd >= 20 ? 'var(--warning)' : 'var(--danger)';
-            
+            let statusText = m.rmssd >= 40 ? 'Good' : m.rmssd >= 20 ? 'Moderate' : 'Low';
             const item = document.createElement('div');
             item.className = 'history-item';
-            item.innerHTML = `
-                <div class="metrics">
-                    <span class="dot" style="background: ${dotColor}"></span>
-                    <span class="date">${dateStr}</span>
-                </div>
-                <div class="metrics">
-                    <strong style="color: var(--text-main)">${Math.round(m.rmssd)} ms</strong>
-                    <span>(Score: ${m.readiness})</span>
-                </div>
-            `;
+
+            const left = document.createElement('div');
+            left.className = 'metrics';
+            const dot = document.createElement('span');
+            dot.className = 'dot';
+            dot.style.background = dotColor;
+            dot.setAttribute('aria-hidden', 'true');
+            const date = document.createElement('span');
+            date.className = 'date';
+            date.textContent = dateStr;
+            const status = document.createElement('span');
+            status.style.fontSize = '0.75rem';
+            status.textContent = `(${statusText})`;
+            left.appendChild(dot);
+            left.appendChild(date);
+            left.appendChild(status);
+
+            const right = document.createElement('div');
+            right.className = 'metrics';
+            const rmssd = document.createElement('strong');
+            rmssd.style.color = 'var(--text-main)';
+            rmssd.textContent = `${Math.round(m.rmssd)} ms`;
+            const score = document.createElement('span');
+            score.textContent = `(Score: ${m.readiness})`;
+            const deleteBtn = document.createElement('button');
+            deleteBtn.textContent = 'Delete';
+            deleteBtn.dataset.measurementId = fallbackMeasurementId(m);
+            deleteBtn.style.width = 'auto';
+            deleteBtn.style.minHeight = 'unset';
+            deleteBtn.style.padding = '4px 8px';
+            deleteBtn.style.fontSize = '0.75rem';
+            deleteBtn.style.color = 'var(--danger)';
+            right.appendChild(rmssd);
+            right.appendChild(score);
+            right.appendChild(deleteBtn);
+
+            item.appendChild(left);
+            item.appendChild(right);
             listDiv.appendChild(item);
         });
 
@@ -1233,7 +1441,7 @@
         const labels = recent30.map(m => new Date(m.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }));
         const data = recent30.map(m => m.rmssd);
 
-        if (chartHistory) chartHistory.destroy();
+        destroyChartSafe(chartHistory);
         chartHistory = new Chart(ctx, {
             type: 'line',
             data: {
@@ -1324,7 +1532,7 @@
 
         } catch (error) {
             console.error(error);
-            alert("Bluetooth Error: " + error.message);
+            showToast("Bluetooth Error: " + error.message, 'danger');
             document.getElementById('btn-connect').innerHTML = "Connect Sensor";
         }
     }
@@ -1504,10 +1712,12 @@
     }
 
     function calcReadiness(rmssd) {
-        if (appState.measurements.length < 3) return 65;
-        let recent = appState.measurements.slice(-7);
-        let avg = recent.reduce((sum, m) => sum + m.rmssd, 0) / recent.length;
-        let score = (rmssd / avg) * 65;
+        let baselineWindow = appState.measurements.slice(-28);
+        if (baselineWindow.length === 0) return 50;
+        let baseline = baselineWindow.reduce((sum, m) => sum + m.rmssd, 0) / baselineWindow.length;
+        let confidenceFactor = Math.min(1, baselineWindow.length / 7);
+        let raw = (rmssd / baseline) * 70;
+        let score = raw * confidenceFactor + (50 * (1 - confidenceFactor));
         return Math.max(0, Math.min(100, Math.round(score)));
     }
 
@@ -1517,7 +1727,7 @@
 
         let cleanRR = filterRR(bleState.rawRRs);
         if (cleanRR.length < 10) {
-            alert(`Not enough valid data. Raw length: ${bleState.rawRRs.length}, Valid length: ${cleanRR.length}. Ensure straps are moist & try again.`);
+            showToast(`Not enough valid data (${cleanRR.length}/${bleState.rawRRs.length}). Ensure straps are moist and retry.`, 'warning');
             discardMeasurement();
             return;
         }
@@ -1551,6 +1761,7 @@
     function saveMeasurement() {
         if(!bleState.lastResult) return;
         bleState.lastResult.id = crypto.randomUUID();
+        bleState.lastResult.updatedAt = new Date().toISOString();
         appState.measurements.push(bleState.lastResult);
         localStorage.setItem('omegahrv_measurements', JSON.stringify(appState.measurements));
         pushMeasurement(bleState.lastResult); // sync to cloud
@@ -1571,7 +1782,7 @@
 
     // --- DATA EXPORT ---
     function exportCSV() {
-        if (appState.measurements.length === 0) return alert("No data to export.");
+        if (appState.measurements.length === 0) return showToast("No data to export.", 'warning');
         
         let headers = "Date,Readiness,RMSSD,SDNN,pNN50,MeanHR,StressIndex,RRCount\n";
         let rows = appState.measurements.map(m => {
@@ -1587,12 +1798,13 @@
         URL.revokeObjectURL(url);
     }
 
-    function confirmClear() {
-        if(confirm("Are you sure you want to delete all historical measurements? This cannot be undone.")) {
+    async function confirmClear() {
+        const confirmed = await showConfirm("Are you sure you want to delete all historical measurements? This cannot be undone.", { title: 'Clear data', confirmText: 'Delete all' });
+        if(confirmed) {
             appState.measurements = [];
             localStorage.removeItem('omegahrv_measurements');
             initApp();
-            alert("Data cleared.");
+            showToast("Data cleared.", 'success');
         }
     }
     // --- TRAINING DIARY LOGIC ---
@@ -1770,7 +1982,8 @@
             notes: document.getElementById('log-notes').value,
             readinessScore: exactMatch ? exactMatch.readiness : null,
             hasPB: false,
-            pbDetails: []
+            pbDetails: [],
+            updatedAt: new Date().toISOString()
         };
 
         if(type === 'running') {
@@ -1840,12 +2053,29 @@
             confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, zIndex: 1000 });
         }
         
-        // Reset base form
-        document.getElementById('log-title').value = '';
-        document.getElementById('log-notes').value = '';
+        resetLogForm();
         renderSessionList();
         renderLogSparkline();
-        alert(sess.hasPB ? `Session Saved! ${sess.pbDetails.join(', ')}` : "Session saved.");
+        showToast(sess.hasPB ? `Session saved! ${sess.pbDetails.join(', ')}` : "Session saved.", 'success');
+    }
+
+    function resetLogForm() {
+        document.getElementById('log-title').value = '';
+        document.getElementById('log-notes').value = '';
+        document.getElementById('log-rpe').value = '5';
+        document.getElementById('log-rpe-val').value = '5';
+        document.getElementById('run-total-dist').innerText = '0 m';
+        document.getElementById('run-total-time').innerText = '00:00';
+        document.getElementById('run-total-dist').dataset.metres = 0;
+        document.getElementById('run-total-time').dataset.secs = 0;
+        document.getElementById('run-total-time').dataset.restSecs = 0;
+        document.querySelector('#run-splits-table tbody').innerHTML = '';
+        document.getElementById('lift-duration').value = '';
+        qsa('#lift-modalities .chip').forEach(chip => chip.classList.remove('active'));
+        document.getElementById('lift-exercises-container').innerHTML = '';
+        document.getElementById('other-activity').value = '';
+        document.getElementById('other-duration').value = '';
+        updateRunCalcs();
     }
 
     function checkAndUpdatePBs(sess) {
@@ -1907,30 +2137,98 @@
         appState.sessions.forEach(s => {
             let el = document.createElement('div');
             el.className = 'log-item';
-            let icon = (s.type === 'running')?'🏃':(s.type === 'weightlifting')?'🏋️':'○';
-            let pbDot = s.hasPB ? '<span class="pb-star" style="position:static; margin-left:4px;">★ PR</span>' : '';
-            let readB = s.readinessScore ? `<span class="badge ${s.readinessScore>=75?'bg-green':s.readinessScore>40?'bg-amber':'bg-red'}" style="font-size:0.7rem;">CNS: ${s.readinessScore}</span>` : '';
-            
-            el.innerHTML = `
-                <div class="log-item-header">
-                    <strong style="font-size: 0.95rem;">${icon} ${s.title} ${pbDot}</strong>
-                    <span style="font-size:0.8rem; color:var(--text-muted);">${s.date} ${s.time}</span>
-                </div>
-                <div style="font-size:0.85rem; color:var(--text-muted); margin-bottom: 8px;">${readB} RPE: ${s.rpe}/10</div>
-                <button style="border:none; color:var(--danger); background:none; text-align:left; font-size:0.8rem; padding:0; min-height:unset; display:inline;" onclick="deleteSession('${s.id}')">Delete</button>
-            `;
+            let icon = (s.type === 'running') ? '🏃' : (s.type === 'weightlifting') ? '🏋️' : '○';
+
+            const header = document.createElement('div');
+            header.className = 'log-item-header';
+
+            const title = document.createElement('strong');
+            title.style.fontSize = '0.95rem';
+            title.textContent = `${icon} ${s.title}`;
+            if (s.hasPB) {
+                const pb = document.createElement('span');
+                pb.className = 'pb-star';
+                pb.style.position = 'static';
+                pb.style.marginLeft = '4px';
+                pb.textContent = '★ PR';
+                title.appendChild(document.createTextNode(' '));
+                title.appendChild(pb);
+            }
+
+            const dt = document.createElement('span');
+            dt.style.fontSize = '0.8rem';
+            dt.style.color = 'var(--text-muted)';
+            dt.textContent = `${s.date} ${s.time}`;
+
+            header.appendChild(title);
+            header.appendChild(dt);
+
+            const meta = document.createElement('div');
+            meta.style.fontSize = '0.85rem';
+            meta.style.color = 'var(--text-muted)';
+            meta.style.marginBottom = '8px';
+            if (s.readinessScore != null) {
+                const readiness = document.createElement('span');
+                readiness.className = `badge ${s.readinessScore>=75?'bg-green':s.readinessScore>40?'bg-amber':'bg-red'}`;
+                readiness.style.fontSize = '0.7rem';
+                readiness.textContent = `CNS: ${s.readinessScore}`;
+                meta.appendChild(readiness);
+                meta.appendChild(document.createTextNode(' '));
+            }
+            meta.appendChild(document.createTextNode(`RPE: ${s.rpe}/10`));
+
+            const delBtn = document.createElement('button');
+            delBtn.style.border = 'none';
+            delBtn.style.color = 'var(--danger)';
+            delBtn.style.background = 'none';
+            delBtn.style.textAlign = 'left';
+            delBtn.style.fontSize = '0.8rem';
+            delBtn.style.padding = '0';
+            delBtn.style.minHeight = 'unset';
+            delBtn.style.display = 'inline';
+            delBtn.textContent = 'Delete';
+            delBtn.dataset.sessionId = s.id;
+            delBtn.className = 'delete-session-btn';
+
+            el.appendChild(header);
+            el.appendChild(meta);
+            el.appendChild(delBtn);
             c.appendChild(el);
         });
     }
 
-    window.deleteSession = function(id) {
-        if(confirm("Delete this session forever?")) {
+    window.deleteSession = async function(id) {
+        const confirmed = await showConfirm("Delete this session forever?", { title: 'Delete session', confirmText: 'Delete' });
+        if(confirmed) {
             appState.sessions = appState.sessions.filter(s => s.id !== id);
             localStorage.setItem('omegahrv_sessions', JSON.stringify(appState.sessions));
+            if (currentUser) {
+                try {
+                    const query = sbClient.from('sessions');
+                    if (query.delete) await query.delete().eq('user_id', currentUser.id).eq('id', id);
+                } catch(e) { console.warn('Cloud session delete failed', e); }
+            }
             renderSessionList();
             renderPBsGym(); renderPBsTrack();
+            showToast('Session deleted.', 'success');
         }
     };
+
+    async function deleteMeasurement(id) {
+        const confirmed = await showConfirm('Delete this measurement?', { title: 'Delete measurement', confirmText: 'Delete' });
+        if (!confirmed) return;
+        appState.measurements = appState.measurements.filter(m => fallbackMeasurementId(m) !== id);
+        localStorage.setItem('omegahrv_measurements', JSON.stringify(appState.measurements));
+        if (currentUser) {
+            try {
+                const query = sbClient.from('measurements');
+                if (query.delete) await query.delete().eq('user_id', currentUser.id).eq('id', id);
+            } catch(e) { console.warn('Cloud measurement delete failed', e); }
+        }
+        renderHistory();
+        renderDashboard();
+        showToast('Measurement deleted.', 'success');
+    }
 
     function addCustomTrackPB() {
         let d = prompt("Enter custom distance (e.g., '55m' or 'Marathon'):");
@@ -1955,9 +2253,26 @@
             let pb = appState.personalBests.track[k];
             if(pb) {
                 let st = formatTimeLength(pb.time, true);
-                row.innerHTML = `<td><strong>${k}</strong></td><td style="color:var(--accent); font-weight:600;">${st}</td><td>${pb.date}</td>`;
+                const td1 = document.createElement('td');
+                const strong = document.createElement('strong');
+                strong.textContent = k;
+                td1.appendChild(strong);
+                const td2 = document.createElement('td');
+                td2.style.color = 'var(--accent)';
+                td2.style.fontWeight = '600';
+                td2.textContent = st;
+                const td3 = document.createElement('td');
+                td3.textContent = pb.date;
+                row.append(td1, td2, td3);
             } else {
-                row.innerHTML = `<td>${k}</td><td style="color:var(--text-muted)">--</td><td>--</td>`;
+                const td1 = document.createElement('td');
+                td1.textContent = k;
+                const td2 = document.createElement('td');
+                td2.style.color = 'var(--text-muted)';
+                td2.textContent = '--';
+                const td3 = document.createElement('td');
+                td3.textContent = '--';
+                row.append(td1, td2, td3);
             }
             t.appendChild(row);
         });
@@ -1970,7 +2285,20 @@
         keys.forEach(k => {
             let row = document.createElement('tr');
             let pb = appState.personalBests.gym[k];
-            row.innerHTML = `<td><strong>${k}</strong></td><td style="color:var(--accent); font-weight:600;">${Math.round(pb.e1rm)}kg</td><td>${pb.load}kg × ${pb.reps}</td><td style="font-size:0.75rem">${pb.date}</td>`;
+            const td1 = document.createElement('td');
+            const strong = document.createElement('strong');
+            strong.textContent = k;
+            td1.appendChild(strong);
+            const td2 = document.createElement('td');
+            td2.style.color = 'var(--accent)';
+            td2.style.fontWeight = '600';
+            td2.textContent = `${Math.round(pb.e1rm)}kg`;
+            const td3 = document.createElement('td');
+            td3.textContent = `${pb.load}kg × ${pb.reps}`;
+            const td4 = document.createElement('td');
+            td4.style.fontSize = '0.75rem';
+            td4.textContent = pb.date;
+            row.append(td1, td2, td3, td4);
             t.appendChild(row);
         });
     }
@@ -2023,6 +2351,14 @@
             }
             
             el.innerHTML += `<span class="date-num">${d}</span><div class="cal-indicators">${indHTML}</div>`;
+            if (om) {
+                const readinessStatus = om.readiness >= 75 ? 'high readiness' : om.readiness > 40 ? 'moderate readiness' : 'low readiness';
+                el.setAttribute('aria-label', `${dateStr}: ${readinessStatus}${sesss.length ? `, ${sesss.length} session(s)` : ''}`);
+            } else if (sesss.length) {
+                el.setAttribute('aria-label', `${dateStr}: ${sesss.length} session(s)`);
+            } else {
+                el.setAttribute('aria-label', `${dateStr}: no data`);
+            }
             el.onclick = () => openDayModal(dateStr, om, sesss);
             c.appendChild(el);
         }
@@ -2034,19 +2370,72 @@
     function openDayModal(date, om, sessions) {
         let ol = document.createElement('div');
         ol.className = 'modal-overlay active';
-        let hHTML = `<h2>${date}</h2>`;
-        if(om) {
-            hHTML += `<div class="card" style="background:var(--card); font-size:0.85rem;"><strong style="font-size:1rem; color:var(--accent);">Readiness: ${om.readiness}/100</strong><br>RMSSD ${Math.round(om.rmssd)}ms | HR ${Math.round(om.meanHR)}bpm | SDNN ${Math.round(om.sdnn)}</div>`;
+        const card = document.createElement('div');
+        card.className = 'modal-card';
+
+        const closeBtn = document.createElement('button');
+        closeBtn.style.position = 'absolute';
+        closeBtn.style.top = '10px';
+        closeBtn.style.right = '10px';
+        closeBtn.style.border = 'none';
+        closeBtn.style.background = 'none';
+        closeBtn.style.fontSize = '1.5rem';
+        closeBtn.style.color = 'var(--text-main)';
+        closeBtn.setAttribute('aria-label', 'Close day details');
+        closeBtn.textContent = '×';
+        closeBtn.onclick = () => ol.remove();
+        card.appendChild(closeBtn);
+
+        const title = document.createElement('h2');
+        title.textContent = date;
+        card.appendChild(title);
+
+        if (om) {
+            const metricsCard = document.createElement('div');
+            metricsCard.className = 'card';
+            metricsCard.style.background = 'var(--card)';
+            metricsCard.style.fontSize = '0.85rem';
+            const strong = document.createElement('strong');
+            strong.style.fontSize = '1rem';
+            strong.style.color = 'var(--accent)';
+            strong.textContent = `Readiness: ${om.readiness}/100`;
+            const details = document.createElement('div');
+            details.textContent = `RMSSD ${Math.round(om.rmssd)}ms | HR ${Math.round(om.meanHR)}bpm | SDNN ${Math.round(om.sdnn)}`;
+            metricsCard.appendChild(strong);
+            metricsCard.appendChild(details);
+            card.appendChild(metricsCard);
         } else {
-            hHTML += `<p style="font-size:0.85rem; color:var(--text-muted)">No readiness data.</p>`;
+            const p = document.createElement('p');
+            p.style.fontSize = '0.85rem';
+            p.style.color = 'var(--text-muted)';
+            p.textContent = 'No readiness data.';
+            card.appendChild(p);
         }
-        if(sessions.length>0) {
-            hHTML += `<h3 style="font-size:1rem; margin-top:10px;">Sessions</h3>`;
+
+        if (sessions.length > 0) {
+            const sh = document.createElement('h3');
+            sh.style.fontSize = '1rem';
+            sh.style.marginTop = '10px';
+            sh.textContent = 'Sessions';
+            card.appendChild(sh);
             sessions.forEach(s => {
-                hHTML += `<div style="border-left:2px solid var(--accent); padding-left:10px; margin-bottom:5px; font-size:0.85rem;"><strong>${s.title}</strong><br><span style="color:var(--text-muted)">RPE ${s.rpe}/10 | ${s.time}</span></div>`;
+                const row = document.createElement('div');
+                row.style.borderLeft = '2px solid var(--accent)';
+                row.style.paddingLeft = '10px';
+                row.style.marginBottom = '5px';
+                row.style.fontSize = '0.85rem';
+                const st = document.createElement('strong');
+                st.textContent = s.title;
+                const span = document.createElement('span');
+                span.style.color = 'var(--text-muted)';
+                span.textContent = `RPE ${s.rpe}/10 | ${s.time}`;
+                row.appendChild(st);
+                row.appendChild(document.createElement('br'));
+                row.appendChild(span);
+                card.appendChild(row);
             });
         }
-        ol.innerHTML = `<div class="modal-card"><button style="position:absolute; top:10px; right:10px; border:none; background:none; font-size:1.5rem; color:var(--text-main);" onclick="this.closest('.modal-overlay').remove()">×</button>${hHTML}</div>`;
+        ol.appendChild(card);
         document.body.appendChild(ol);
     }
 
@@ -2056,7 +2445,7 @@
         ws.style.display = 'block';
         let ctx = document.getElementById('logSparkline');
         if(!ctx) return;
-        if(logSparkChartInst) logSparkChartInst.destroy();
+        destroyChartSafe(logSparkChartInst);
         
         let recent = appState.measurements.slice(-7);
         if(recent.length<2) { ws.style.display='none'; return; }
