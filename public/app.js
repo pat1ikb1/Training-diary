@@ -1508,9 +1508,9 @@
         merged.sort((a,b) => parseInt(a) - parseInt(b));
         
         merged.forEach(k => {
-            let row = document.createElement('tr');
             let pb = appState.personalBests.track[k];
             if(pb) {
+                let row = document.createElement('tr');
                 let st = formatTimeLength(pb.time, true);
                 const td1 = document.createElement('td');
                 const strong = document.createElement('strong');
@@ -1523,17 +1523,8 @@
                 const td3 = document.createElement('td');
                 td3.textContent = pb.date;
                 row.append(td1, td2, td3);
-            } else {
-                const td1 = document.createElement('td');
-                td1.textContent = k;
-                const td2 = document.createElement('td');
-                td2.style.color = 'var(--text-muted)';
-                td2.textContent = '--';
-                const td3 = document.createElement('td');
-                td3.textContent = '--';
-                row.append(td1, td2, td3);
+                t.appendChild(row);
             }
-            t.appendChild(row);
         });
     }
 
@@ -1681,16 +1672,40 @@
                 const row = document.createElement('div');
                 row.style.borderLeft = '2px solid var(--accent)';
                 row.style.paddingLeft = '10px';
-                row.style.marginBottom = '5px';
+                row.style.marginBottom = '10px';
                 row.style.fontSize = '0.85rem';
+                
                 const st = document.createElement('strong');
-                st.textContent = s.title;
-                const span = document.createElement('span');
+                st.textContent = s.title || (s.type.charAt(0).toUpperCase() + s.type.slice(1) + ' Session');
+                
+                const span = document.createElement('div');
                 span.style.color = 'var(--text-muted)';
                 span.textContent = `RPE ${s.rpe}/10 | ${s.time}`;
                 row.appendChild(st);
-                row.appendChild(document.createElement('br'));
                 row.appendChild(span);
+                
+                const det = document.createElement('div');
+                det.style.marginTop = '4px';
+                det.style.fontSize = '0.8rem';
+                if(s.type === 'running' && s.running) {
+                    det.textContent = `Dist: ${s.running.distance}m | Dur: ${s.running.time}${s.running.splits ? ` | ${s.running.splits.length} splits` : ''}`;
+                } else if (s.type === 'weightlifting' && s.lifting) {
+                    const lNames = s.lifting.map(l => `${l.name} (${l.sets.length} sets)`).join(', ');
+                    det.textContent = lNames ? lNames : 'No exercises logged';
+                } else if (s.other) {
+                    det.textContent = `Activity: ${s.other.activity || 'Unknown'} | Dur: ${s.other.duration || '00:00'}`;
+                }
+                
+                if (s.notes) {
+                    const notesEl = document.createElement('div');
+                    notesEl.style.fontStyle = 'italic';
+                    notesEl.style.marginTop = '4px';
+                    notesEl.style.color = 'var(--text-muted)';
+                    notesEl.textContent = `"${s.notes}"`;
+                    det.appendChild(notesEl);
+                }
+                
+                row.appendChild(det);
                 card.appendChild(row);
             });
         }
