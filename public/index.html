@@ -187,12 +187,12 @@
             </div>
 
             <div class="card" id="log-form-base">
-                <div class="card-row">
-                    <div style="flex:1;">
+                <div class="card-row" style="gap:10px; align-items:flex-start; flex-wrap:wrap;">
+                    <div style="flex:1; min-width:0;">
                         <label for="log-date" style="font-size: 0.75rem; color: var(--text-muted);">Date</label>
                         <input type="date" id="log-date" style="flex:1;" onchange="checkLogReadiness()">
                     </div>
-                    <div style="flex:1;">
+                    <div style="flex:1; min-width:0;">
                         <label for="log-time" style="font-size: 0.75rem; color: var(--text-muted);">Time</label>
                         <input type="time" id="log-time" style="flex:1;" value="12:00">
                     </div>

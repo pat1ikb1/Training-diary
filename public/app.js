@@ -1209,7 +1209,7 @@
             <input type="number" class="kin-gct" placeholder="GCT (ms)">
             <input type="number" class="kin-ft" placeholder="Flight (ms)">
             <input type="number" class="kin-sl" placeholder="Stride L (m)" step="0.01">
-            <input type="number" class="kin-sf" placeholder="Stride F (s/min)">
+            <input type="number" class="kin-sf" placeholder="Stride F (steps/s)">
             <input type="number" class="kin-vo" placeholder="Vert Osc (cm)" step="0.1">
         </div></td>`;
         // input listener for auto-calc
@@ -1337,6 +1337,12 @@
         let s = secs % 60;
         if(showMs) return `${m}:${s.toFixed(2).padStart(5, '0')}`;
         return `${m}:${Math.floor(s).toString().padStart(2, '0')}`;
+    }
+
+    function formatSecondsMetric(secs) {
+        const n = Number(secs);
+        if (!Number.isFinite(n) || n <= 0) return '0.00 s';
+        return `${n.toFixed(2)} s`;
     }
 
     function getSelectedRadio(name) {
@@ -1626,10 +1632,9 @@
                 if(!existing || t < existing.time) {
                     appState.personalBests.track[k] = { time: t, date: sess.date, speed: distM/t };
                     sess.hasPB = true;
-                    sess.pbDetails.push(`${k} in ${formatTimeLength(t, true)}`);
+                    sess.pbDetails.push(`${k} in ${formatSecondsMetric(t)}`);
                 }
             };
-            checkDist(sess.running.totalDistance, sess.running.totalTime);
             sess.running.splits.forEach(s => checkDist(s.distance, s.time));
         }
 
@@ -1788,7 +1793,7 @@
             let pb = appState.personalBests.track[k];
             if(pb) {
                 let row = document.createElement('tr');
-                let st = formatTimeLength(pb.time, true);
+                let st = formatSecondsMetric(pb.time);
                 const td1 = document.createElement('td');
                 const strong = document.createElement('strong');
                 strong.textContent = k;
@@ -2052,18 +2057,15 @@
                             const distDisplay = s.running.totalDistance >= 1000
                                 ? (s.running.totalDistance / 1000).toFixed(2) + ' km'
                                 : (s.running.totalDistance || 0) + ' m';
-                            const durDisplay = formatTimeLength(s.running.totalTime || 0);
+                            const splitRestSecs = Array.isArray(s.running.splits)
+                                ? s.running.splits.reduce((sum, split) => sum + (Number(split?.rest) || 0), 0)
+                                : 0;
+                            const durDisplay = formatTimeLength((s.running.totalTime || 0) + splitRestSecs);
                             
                             let runBlock = document.createElement('div');
                             renderIfPresent(runBlock, 'Total Distance', distDisplay);
                             renderIfPresent(runBlock, 'Total Time', durDisplay);
                             
-                            if (s.running.totalDistance > 0 && s.running.totalTime > 0) {
-                                let speedMs = s.running.totalDistance / s.running.totalTime;
-                                let paceSecs = 1000 / speedMs;
-                                renderIfPresent(runBlock, 'Avg Pace', formatTimeLength(paceSecs) + ' /km');
-                            }
-
                             if (Array.isArray(s.running.splits) && s.running.splits.length > 0) {
                                 let splitsTitle = document.createElement('div');
                                 splitsTitle.style.marginTop = '6px';
@@ -2088,7 +2090,7 @@
                                         if(split.kinematics.gct) kinText.push(`GCT: ${split.kinematics.gct}ms`);
                                         if(split.kinematics.ft) kinText.push(`Flight: ${split.kinematics.ft}ms`);
                                         if(split.kinematics.sl) kinText.push(`Stride: ${split.kinematics.sl}m`);
-                                        if(split.kinematics.sf) kinText.push(`Freq: ${split.kinematics.sf}s/m`);
+                                        if(split.kinematics.sf) kinText.push(`Freq: ${split.kinematics.sf} steps/s`);
                                         if(split.kinematics.vo) kinText.push(`Vert: ${split.kinematics.vo}cm`);
                                         if(kinText.length > 0) {
                                             let kDiv = document.createElement('div');
