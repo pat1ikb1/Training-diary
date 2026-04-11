@@ -2448,7 +2448,7 @@
             if (calView) {
                 calView.scrollTo({ top: calView.scrollHeight, behavior: 'smooth' });
             }
-        }, 80);
+        }, 300);
     }
     window.openDayModal = openDayModal;
 
