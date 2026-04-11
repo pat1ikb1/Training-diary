@@ -1325,6 +1325,13 @@
         return Number.isFinite(mins) ? mins * 60 : 0;
     }
 
+    function getSplitSpikesValue(split) {
+        const spikes = String(split?.spikes ?? '').toLowerCase();
+        if (spikes === 'no') return 'no';
+        if (spikes === 'yes') return 'yes';
+        return String(split?.label || '').toLowerCase() === 'no' ? 'no' : 'yes';
+    }
+
     function formatRestInput(restSecs) {
         const secs = parseFloat(restSecs) || 0;
         if (secs <= 0) return '';
@@ -1425,10 +1432,7 @@
                 const tr = rows[rows.length - 1];
                 const kinTr = tr?.nextElementSibling;
                 if (!tr) return;
-                const spikesVal = String(split.spikes ?? '').toLowerCase() === 'no'
-                    ? 'no'
-                    : (String(split.label || '').toLowerCase() === 'no' ? 'no' : 'yes');
-                tr.querySelector('.split-spikes').value = spikesVal;
+                tr.querySelector('.split-spikes').value = getSplitSpikesValue(split);
                 tr.querySelector('.split-dist').value = split.distance || '';
                 tr.querySelector('.split-time').value = split.time ? formatTimeLength(split.time) : '';
                 tr.querySelector('.split-rest').value = formatRestInput(split.rest);
@@ -1704,9 +1708,8 @@
                 readiness.style.fontSize = '0.7rem';
                 readiness.textContent = `CNS: ${s.readinessScore}`;
                 meta.appendChild(readiness);
-                meta.appendChild(document.createTextNode(' • '));
             }
-            meta.appendChild(document.createTextNode(`Type: ${s.type || 'training'}`));
+            meta.appendChild(document.createTextNode(`${s.readinessScore != null ? ' • ' : ''}Type: ${s.type || 'training'}`));
 
             const delBtn = document.createElement('button');
             delBtn.style.border = 'none';
@@ -2135,9 +2138,7 @@
                                     sRow.style.marginTop = '4px';
                                     
                                     let summary = document.createElement('div');
-                                    const spikesLabel = String(split.spikes ?? '').toLowerCase() === 'no'
-                                        ? 'No'
-                                        : (String(split.label || '').toLowerCase() === 'no' ? 'No' : 'Yes');
+                                    const spikesLabel = getSplitSpikesValue(split) === 'no' ? 'No' : 'Yes';
                                     summary.innerHTML = `<em>Spikes: ${spikesLabel}</em> — ${split.distance||0}m in ${split.time||0}s`;
                                     if (split.rest) summary.innerHTML += ` (Rest: ${split.rest}s)`;
                                     sRow.appendChild(summary);
