@@ -1595,8 +1595,8 @@
             let el = document.createElement('div');
             el.className = 'cal-day' + (dateStr === todayStr ? ' today' : '');
             
-            let om = appState.measurements.find(m => m.date.startsWith(dateStr));
-            let sesss = appState.sessions.filter(s => s.date === dateStr);
+            let om = appState.measurements.find(m => normalizeDate(m.date) === dateStr);
+            let sesss = appState.sessions.filter(s => normalizeDate(s.date) === dateStr);
             
             let indHTML = '';
             if(om) {
@@ -1618,11 +1618,17 @@
             } else {
                 el.setAttribute('aria-label', `${dateStr}: no data`);
             }
-            el.onclick = () => {
-                const liveMeas = appState.measurements.find(m => m.date.startsWith(dateStr));
-                const liveSess = appState.sessions.filter(s => s.date === dateStr);
-                openDayModal(dateStr, liveMeas, liveSess);
-            };
+            
+            el.setAttribute('data-date', dateStr);
+            el.setAttribute('role', 'button');
+            el.setAttribute('tabindex', '0');
+            el.addEventListener('click', handleDayInteraction);
+            el.addEventListener('keydown', (e) => {
+                if(e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleDayInteraction.call(el);
+                }
+            });
             c.appendChild(el);
         }
         
@@ -1634,6 +1640,28 @@
         }
     }
     window.renderCalendar = renderCalendar;
+
+    function normalizeDate(dateVal) {
+        if (!dateVal) return null;
+        if (typeof dateVal === 'string') {
+            if (/^\d{4}-\d{2}-\d{2}$/.test(dateVal)) return dateVal;
+            const parsed = new Date(dateVal);
+            if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+            return null;
+        }
+        if (dateVal instanceof Date && !isNaN(dateVal.getTime())) {
+             return dateVal.toISOString().split('T')[0];
+        }
+        return null;
+    }
+
+    function handleDayInteraction() {
+        const dateStr = this.getAttribute('data-date');
+        if (!dateStr) return;
+        const liveMeas = appState.measurements.find(m => normalizeDate(m.date) === dateStr);
+        const liveSess = appState.sessions.filter(s => normalizeDate(s.date) === dateStr);
+        openDayModal(dateStr, liveMeas, liveSess);
+    }
 
     function openDayModal(date, om, sessions) {
         let container = document.getElementById('calendar-day-details');
@@ -1667,81 +1695,93 @@
         title.textContent = "Details for " + date;
         card.appendChild(title);
 
-        if (om) {
-            const metricsCard = document.createElement('div');
-            metricsCard.className = 'card';
-            metricsCard.style.background = 'var(--bg)';
-            metricsCard.style.fontSize = '0.85rem';
-            const strong = document.createElement('strong');
-            strong.style.fontSize = '1rem';
-            strong.style.color = 'var(--accent)';
-            strong.textContent = `Readiness: ${om.readiness}/100`;
-            const details = document.createElement('div');
-            details.textContent = `RMSSD ${Math.round(om.rmssd)}ms | HR ${Math.round(om.meanHR)}bpm | SDNN ${Math.round(om.sdnn)}`;
-            metricsCard.appendChild(strong);
-            metricsCard.appendChild(details);
-            card.appendChild(metricsCard);
+        if (!om && sessions.length === 0) {
+            const emptyP = document.createElement('p');
+            emptyP.style.fontSize = '0.85rem';
+            emptyP.style.color = 'var(--text-muted)';
+            emptyP.textContent = 'No sessions or measurements recorded on this day.';
+            card.appendChild(emptyP);
         } else {
-            const p = document.createElement('p');
-            p.style.fontSize = '0.85rem';
-            p.style.color = 'var(--text-muted)';
-            p.textContent = 'No readiness data.';
-            card.appendChild(p);
-        }
-
-        if (sessions.length > 0) {
-            const sh = document.createElement('h3');
-            sh.style.fontSize = '1rem';
-            sh.style.marginTop = '10px';
-            sh.textContent = 'Sessions';
-            card.appendChild(sh);
-            sessions.forEach(s => {
-                const row = document.createElement('div');
-                row.style.borderLeft = '2px solid var(--accent)';
-                row.style.paddingLeft = '10px';
-                row.style.marginBottom = '10px';
-                row.style.fontSize = '0.85rem';
-                
-                let typeStr = (typeof s.type === 'string' && s.type.length > 0) ? s.type : 'Training';
-                const st = document.createElement('strong');
-                st.textContent = s.title || (typeStr.charAt(0).toUpperCase() + typeStr.slice(1) + ' Session');
-                
-                const span = document.createElement('div');
-                span.style.color = 'var(--text-muted)';
-                span.textContent = `RPE ${s.rpe || '--'}/10 | ${s.time || '--'}`;
-                row.appendChild(st);
-                row.appendChild(span);
-                
-                const det = document.createElement('div');
-                det.style.marginTop = '4px';
-                det.style.fontSize = '0.8rem';
-                if(s.type === 'running' && typeof s.running === 'object' && s.running !== null) {
-                    const distDisplay = s.running.totalDistance >= 1000
-                        ? (s.running.totalDistance / 1000).toFixed(2) + ' km'
-                        : (s.running.totalDistance || 0) + ' m';
-                    const durDisplay = formatTimeLength(s.running.totalTime || 0);
-                    det.textContent = `Dist: ${distDisplay} | Dur: ${durDisplay}${Array.isArray(s.running.splits) ? ` | ${s.running.splits.length} splits` : ''}`;
-                } else if (s.type === 'weightlifting' && s.lifting && Array.isArray(s.lifting.exercises)) {
-                    const lNames = s.lifting.exercises.map(l =>
-                        `${l.name} (${Array.isArray(l.sets) ? l.sets.length : 0} sets)`
-                    ).join(', ');
-                    det.textContent = lNames || 'No exercises logged';
-                } else if (s.other && typeof s.other === 'object') {
-                    det.textContent = `Activity: ${s.other.activity || 'Unknown'} | Dur: ${s.other.duration || '00:00'}`;
-                }
-                
-                if (s.notes) {
-                    const notesEl = document.createElement('div');
-                    notesEl.style.fontStyle = 'italic';
-                    notesEl.style.marginTop = '4px';
-                    notesEl.style.color = 'var(--text-muted)';
-                    notesEl.textContent = `"${s.notes}"`;
-                    det.appendChild(notesEl);
-                }
-                
-                row.appendChild(det);
-                card.appendChild(row);
-            });
+            if (om) {
+                const metricsCard = document.createElement('div');
+                metricsCard.className = 'card';
+                metricsCard.style.background = 'var(--bg)';
+                metricsCard.style.fontSize = '0.85rem';
+                const strong = document.createElement('strong');
+                strong.style.fontSize = '1rem';
+                strong.style.color = 'var(--accent)';
+                strong.textContent = `Readiness: ${om.readiness}/100`;
+                const details = document.createElement('div');
+                details.textContent = `RMSSD ${Math.round(om.rmssd)}ms | HR ${Math.round(om.meanHR)}bpm | SDNN ${Math.round(om.sdnn)}`;
+                metricsCard.appendChild(strong);
+                metricsCard.appendChild(details);
+                card.appendChild(metricsCard);
+            } else {
+                const p = document.createElement('p');
+                p.style.fontSize = '0.85rem';
+                p.style.color = 'var(--text-muted)';
+                p.textContent = 'No readiness data.';
+                card.appendChild(p);
+            }
+    
+            if (sessions.length > 0) {
+                const sh = document.createElement('h3');
+                sh.style.fontSize = '1rem';
+                sh.style.marginTop = '10px';
+                sh.textContent = 'Sessions';
+                card.appendChild(sh);
+                sessions.forEach(s => {
+                    try {
+                        const row = document.createElement('div');
+                        row.style.borderLeft = '2px solid var(--accent)';
+                        row.style.paddingLeft = '10px';
+                        row.style.marginBottom = '10px';
+                        row.style.fontSize = '0.85rem';
+                        
+                        let typeStr = (typeof s.type === 'string' && s.type.length > 0) ? s.type : 'Training';
+                        const st = document.createElement('strong');
+                        st.textContent = s.title || (typeStr.charAt(0).toUpperCase() + typeStr.slice(1) + ' Session');
+                        
+                        const span = document.createElement('div');
+                        span.style.color = 'var(--text-muted)';
+                        span.textContent = `RPE ${s.rpe || '--'}/10 | ${s.time || '--'}`;
+                        row.appendChild(st);
+                        row.appendChild(span);
+                        
+                        const det = document.createElement('div');
+                        det.style.marginTop = '4px';
+                        det.style.fontSize = '0.8rem';
+                        if(s.type === 'running' && typeof s.running === 'object' && s.running !== null) {
+                            const distDisplay = s.running.totalDistance >= 1000
+                                ? (s.running.totalDistance / 1000).toFixed(2) + ' km'
+                                : (s.running.totalDistance || 0) + ' m';
+                            const durDisplay = formatTimeLength(s.running.totalTime || 0);
+                            det.textContent = `Dist: ${distDisplay} | Dur: ${durDisplay}${Array.isArray(s.running.splits) ? ` | ${s.running.splits.length} splits` : ''}`;
+                        } else if (s.type === 'weightlifting' && s.lifting && Array.isArray(s.lifting.exercises)) {
+                            const lNames = s.lifting.exercises.map(l =>
+                                `${l.name} (${Array.isArray(l.sets) ? l.sets.length : 0} sets)`
+                            ).join(', ');
+                            det.textContent = lNames || 'No exercises logged';
+                        } else if (s.other && typeof s.other === 'object') {
+                            det.textContent = `Activity: ${s.other.activity || 'Unknown'} | Dur: ${s.other.duration || '00:00'}`;
+                        }
+                        
+                        if (s.notes) {
+                            const notesEl = document.createElement('div');
+                            notesEl.style.fontStyle = 'italic';
+                            notesEl.style.marginTop = '4px';
+                            notesEl.style.color = 'var(--text-muted)';
+                            notesEl.textContent = `"${s.notes}"`;
+                            det.appendChild(notesEl);
+                        }
+                        
+                        row.appendChild(det);
+                        card.appendChild(row);
+                    } catch (err) {
+                        console.error('Failed to parse session layout details for a record:', s, err);
+                    }
+                });
+            }
         }
         container.appendChild(card);
         
