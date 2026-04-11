@@ -2314,6 +2314,15 @@
         return '○';
     }
 
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#39;');
+    }
+
     function formatMMSS(totalSeconds) {
         const secs = Number(totalSeconds) || 0;
         const m = Math.floor(Math.max(0, secs) / 60);
@@ -2399,7 +2408,7 @@
     }
 
     function sectionTitle(text) {
-        return `<h3 style="font-size:1rem; margin-bottom:10px; color:var(--text-main);">${text}</h3>`;
+        return `<h3 style="font-size:1rem; margin-bottom:10px; color:var(--text-main);">${escapeHtml(text)}</h3>`;
     }
 
     function chartCanvasBlock(id) {
@@ -2543,7 +2552,7 @@
             <div class="card">
                 <div class="analytics-controls">
                     <h3 style="font-size:1rem; margin:0; color:var(--text-main);">Daily Analytics</h3>
-                    <input type="date" id="analytics-daily-date" value="${selectedDate}" style="max-width:220px; min-height:36px; padding:8px 10px;">
+                    <input type="date" id="analytics-daily-date" value="${escapeHtml(selectedDate)}" style="max-width:220px; min-height:36px; padding:8px 10px;">
                 </div>
             </div>
         `);
@@ -2915,7 +2924,7 @@
         const loadUnits = getSessionLoadUnits(selectedSession);
         const sessionSummary = selectedSession ? `
             <div style="margin-top:10px; padding-top:10px; border-top:1px solid var(--border); font-size:0.85rem; color:var(--text-main);">
-                <div><strong>${analyticsIconForType(selectedSession.type)} ${selectedSession.title || 'Session'}</strong></div>
+                <div><strong>${analyticsIconForType(selectedSession.type)} ${escapeHtml(selectedSession.title || 'Session')}</strong></div>
                 <div style="display:flex; gap:8px; align-items:center; margin-top:4px;">
                     <span class="badge ${((Number(selectedSession?.rpe) || 0) >= 8) ? 'bg-red' : ((Number(selectedSession?.rpe) || 0) >= 5) ? 'bg-amber' : 'bg-green'}">RPE ${Number(selectedSession?.rpe) || 0}</span>
                     <span style="color:var(--text-muted);">Load Units: ${loadUnits.toFixed(1)}</span>
