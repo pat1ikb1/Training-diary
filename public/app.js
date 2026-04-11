@@ -486,6 +486,11 @@
                 if (editBtn?.dataset.sessionEditId) startSessionEdit(editBtn.dataset.sessionEditId, 'calendar');
             });
         }
+
+        const logTitleInput = document.getElementById('log-title');
+        if (logTitleInput) {
+            logTitleInput.addEventListener('input', updateDefaultSplitSpikesForTitle);
+        }
     });
 
     function applySettingsToUI() {
@@ -1368,6 +1373,19 @@
         return n.toFixed(2);
     }
 
+    function updateDefaultSplitSpikesForTitle() {
+        const defaultSpikes = getDefaultSpikesForCurrentSession();
+        qsa('#run-splits-table tbody tr.split-data-row').forEach((tr) => {
+            const spikesEl = tr.querySelector('.split-spikes');
+            const distVal = parseFloat(tr.querySelector('.split-dist')?.value);
+            const timeVal = parseFloat(tr.querySelector('.split-time')?.value);
+            if (!spikesEl) return;
+            if (!Number.isFinite(distVal) && !Number.isFinite(timeVal)) {
+                spikesEl.value = defaultSpikes;
+            }
+        });
+    }
+
     function formatRestInput(restSecs) {
         const secs = parseFloat(restSecs) || 0;
         if (secs <= 0) return '';
@@ -1878,7 +1896,7 @@
         if (!current) return;
         const confirmed = await showConfirm(`Remove PR for ${distanceKey}?`, { title: 'Remove track PR', confirmText: 'Remove' });
         if (!confirmed) return;
-        appState.personalBests.track[distanceKey] = null;
+        delete appState.personalBests.track[distanceKey];
         localStorage.setItem('omegahrv_pbs', JSON.stringify(appState.personalBests));
         renderPBsTrack();
         pushProfile();
