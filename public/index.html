@@ -52,6 +52,10 @@
                 <svg viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
                 <span>PRs</span>
             </button>
+            <button type="button" class="nav-item" onclick="switchTab('analytics', this)">
+                <svg viewBox="0 0 24 24"><path d="M3 3v18h18M7 16l4-4 4 4 4-8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                <span>Analytics</span>
+            </button>
             <button type="button" class="nav-item" onclick="switchTab('calendar', this)">
                 <svg viewBox="0 0 24 24"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11z"/></svg>
                 <span>Calendar</span>
@@ -292,6 +296,10 @@
                     </table>
                 </div>
             </div>
+        </div>
+
+        <div class="view" id="view-analytics">
+            <!-- renderAnalytics() injects all content here -->
         </div>
 
         <!-- CALENDAR -->

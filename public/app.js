@@ -540,6 +540,7 @@
             checkLogReadiness(); renderSessionList(); renderLogSparkline(); 
         }
         if(tabId === 'prs') { renderPBsTrack(); renderPBsGym(); renderLogSparkline(); }
+        if(tabId === 'analytics') renderAnalytics();
         if(tabId === 'calendar') renderCalendar(new Date().getFullYear(), new Date().getMonth());
     }
 
@@ -2402,3 +2403,1299 @@
             }
         });
     }
+
+    const analyticsCharts = {};
+    const analyticsState = {
+        dailyDate: '',
+        weekOffset: 0,
+        monthOffset: 0
+    };
+
+    function analyticsCss(name) {
+        return getComputedStyle(document.body).getPropertyValue(name).trim();
+    }
+
+    function analyticsIconForType(type) {
+        if (type === 'running') return '🏃';
+        if (type === 'weightlifting') return '🏋️';
+        return '○';
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#39;');
+    }
+
+    function formatMMSS(totalSeconds) {
+        const secs = Number(totalSeconds) || 0;
+        const m = Math.floor(Math.max(0, secs) / 60);
+        const s = Math.round(Math.max(0, secs) % 60);
+        return `${m}:${String(s).padStart(2, '0')}`;
+    }
+
+    function formatDistanceHuman(meters) {
+        const m = Number(meters) || 0;
+        if (m >= 1000) return `${(m / 1000).toFixed(2)} km`;
+        return `${Math.round(m)} m`;
+    }
+
+    function formatKmh(kmh) {
+        return `${(Number(kmh) || 0).toFixed(1)} km/h`;
+    }
+
+    function formatKg(v) {
+        return `${(Number(v) || 0).toFixed(1)}kg`;
+    }
+
+    function formatDateKey(d) {
+        if (!(d instanceof Date) || Number.isNaN(d.getTime())) return '';
+        return d.toISOString().split('T')[0];
+    }
+
+    function addDays(date, delta) {
+        const d = new Date(date);
+        d.setDate(d.getDate() + delta);
+        return d;
+    }
+
+    function startOfISOWeek(date) {
+        const d = new Date(date);
+        const day = d.getDay();
+        const diff = day === 0 ? -6 : 1 - day;
+        d.setHours(0, 0, 0, 0);
+        d.setDate(d.getDate() + diff);
+        return d;
+    }
+
+    function getISOWeekNumber(date) {
+        const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+        const dayNum = d.getUTCDay() || 7;
+        d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+        const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+        return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+    }
+
+    function getSessionDurationMinutes(session) {
+        if (!session) return 0;
+        if (session.type === 'running') return (Number(session.running?.totalTime) || 0) / 60;
+        if (session.type === 'weightlifting') return (parseTime(session.lifting?.duration) || 0) / 60;
+        return (parseTime(session.other?.duration) || 0) / 60;
+    }
+
+    function getSessionLoadUnits(session) {
+        const rpe = Number(session?.rpe) || 0;
+        return rpe * getSessionDurationMinutes(session);
+    }
+
+    function getLatestAnalyticsDate() {
+        const dates = [
+            ...(appState.sessions || []).map((s) => normalizeDate(s?.date)).filter(Boolean),
+            ...(appState.measurements || []).map((m) => normalizeDate(m?.date)).filter(Boolean)
+        ];
+        if (!dates.length) return formatDateKey(new Date());
+        return dates.sort().slice(-1)[0];
+    }
+
+    function getDayData(dateKey) {
+        const sessions = (appState.sessions || []).filter((s) => normalizeDate(s?.date) === dateKey);
+        const measurement = (appState.measurements || []).find((m) => normalizeDate(m?.date) === dateKey) || null;
+        return { sessions, measurement };
+    }
+
+    function runningSessionForDay(sessions) {
+        return (sessions || []).find((s) => s?.type === 'running' && (s?.running?.splits || []).length > 0) || null;
+    }
+
+    function liftingSessionForDay(sessions) {
+        return (sessions || []).find((s) => s?.type === 'weightlifting' && (s?.lifting?.exercises || []).length > 0) || null;
+    }
+
+    function sectionTitle(text) {
+        return `<h3 style="font-size:1rem; margin-bottom:10px; color:var(--text-main);">${escapeHtml(text)}</h3>`;
+    }
+
+    function chartCanvasBlock(id) {
+        return `<div class="chart-container" style="position:relative; height:220px;"><canvas id="${id}"></canvas></div>`;
+    }
+
+    function analyticsEmptyState(neededLabel) {
+        return `<div class="card analytics-empty-state"><span>📊</span><span>Not enough data yet — ${neededLabel} sessions needed</span></div>`;
+    }
+
+    function destroyAnalyticsChart(key) {
+        destroyChartSafe(analyticsCharts[key]);
+        analyticsCharts[key] = null;
+    }
+
+    function destroyAllAnalyticsCharts() {
+        Object.keys(analyticsCharts).forEach((k) => destroyAnalyticsChart(k));
+    }
+
+    function refLinePlugin() {
+        return {
+            id: 'analyticsRefLines',
+            afterDraw(chart, args, opts) {
+                const lines = opts?.lines || [];
+                const ctx = chart.ctx;
+                const area = chart.chartArea;
+                if (!ctx || !area) return;
+                lines.forEach((line) => {
+                    const scale = chart.scales[line.axis || 'x'];
+                    if (!scale) return;
+                    const value = line.value;
+                    const px = scale.getPixelForValue(value);
+                    ctx.save();
+                    ctx.strokeStyle = line.color || analyticsCss('--text-muted');
+                    ctx.lineWidth = line.width || 1;
+                    ctx.setLineDash(line.dash || [6, 4]);
+                    ctx.beginPath();
+                    if ((line.axis || 'x') === 'x') {
+                        ctx.moveTo(px, area.top);
+                        ctx.lineTo(px, area.bottom);
+                    } else {
+                        ctx.moveTo(area.left, px);
+                        ctx.lineTo(area.right, px);
+                    }
+                    ctx.stroke();
+                    ctx.restore();
+                });
+            }
+        };
+    }
+
+    function splitAvgMarkerPlugin(avgTimes) {
+        return {
+            id: 'splitAvgMarker',
+            afterDatasetsDraw(chart) {
+                const meta = chart.getDatasetMeta(0);
+                if (!meta) return;
+                const ctx = chart.ctx;
+                const xScale = chart.scales.x;
+                ctx.save();
+                ctx.strokeStyle = analyticsCss('--text-muted');
+                ctx.setLineDash([5, 3]);
+                (meta.data || []).forEach((bar, idx) => {
+                    const t = avgTimes[idx];
+                    if (!Number.isFinite(t)) return;
+                    const x = xScale.getPixelForValue(t);
+                    const y = bar.y;
+                    const half = Math.max(6, (bar.height || 14) / 2);
+                    ctx.beginPath();
+                    ctx.moveTo(x, y - half);
+                    ctx.lineTo(x, y + half);
+                    ctx.stroke();
+                });
+                ctx.restore();
+            }
+        };
+    }
+
+    function quadrantLabelPlugin() {
+        return {
+            id: 'quadrantLabels',
+            afterDraw(chart) {
+                const { ctx, chartArea } = chart;
+                if (!chartArea) return;
+                ctx.save();
+                ctx.fillStyle = analyticsCss('--text-muted');
+                ctx.font = '11px Inter';
+                ctx.fillText('Overreach ⚠️', chartArea.left + 6, chartArea.top + 14);
+                ctx.fillText('Hard + Ready ✓', chartArea.right - 95, chartArea.top + 14);
+                ctx.fillText('Recovery ✓', chartArea.left + 6, chartArea.bottom - 8);
+                ctx.fillText('Undertrained', chartArea.right - 80, chartArea.bottom - 8);
+                ctx.restore();
+            }
+        };
+    }
+
+    function donutCenterPlugin(labelText) {
+        return {
+            id: 'donutCenter',
+            afterDraw(chart) {
+                const meta = chart.getDatasetMeta(0);
+                if (!meta?.data?.length) return;
+                const arc = meta.data[0];
+                const { x, y } = arc;
+                const ctx = chart.ctx;
+                ctx.save();
+                ctx.fillStyle = analyticsCss('--text-main');
+                ctx.font = '600 16px Inter';
+                ctx.textAlign = 'center';
+                ctx.fillText(String(labelText), x, y + 5);
+                ctx.restore();
+            }
+        };
+    }
+
+    function ensureAccordionState() {
+        const daily = document.getElementById('analytics-daily-body');
+        const weekly = document.getElementById('analytics-weekly-body');
+        const monthly = document.getElementById('analytics-monthly-body');
+        if (daily && !daily.style.maxHeight) daily.style.maxHeight = daily.scrollHeight + 'px';
+        if (weekly && !weekly.style.maxHeight) weekly.style.maxHeight = '0px';
+        if (monthly && !monthly.style.maxHeight) monthly.style.maxHeight = '0px';
+    }
+
+    function openDailyAccordion() {
+        const daily = document.getElementById('analytics-daily-body');
+        if (daily) daily.style.maxHeight = daily.scrollHeight + 'px';
+    }
+
+    function renderDailyView() {
+        const wrap = document.getElementById('analytics-daily-content');
+        if (!wrap) return;
+        const selectedDate = analyticsState.dailyDate || getLatestAnalyticsDate();
+        analyticsState.dailyDate = selectedDate;
+        const day = getDayData(selectedDate);
+        const running = runningSessionForDay(day.sessions);
+        const lifting = liftingSessionForDay(day.sessions);
+        const cardList = [];
+
+        cardList.push(`
+            <div class="card">
+                <div class="analytics-controls">
+                    <h3 style="font-size:1rem; margin:0; color:var(--text-main);">Daily Analytics</h3>
+                    <input type="date" id="analytics-daily-date" value="${escapeHtml(selectedDate)}" style="max-width:220px; min-height:36px; padding:8px 10px;">
+                </div>
+            </div>
+        `);
+
+        if (running && (running.running?.splits || []).length >= 1) {
+            cardList.push(`<div class="card">${sectionTitle(`Split Breakdown — ${running.title || 'Running Session'}`)}${chartCanvasBlock('analytics-split-waterfall')}</div>`);
+        } else {
+            cardList.push(analyticsEmptyState('1 running'));
+        }
+
+        if (running && (running.running?.splits || []).length >= 2) {
+            cardList.push(`<div class="card">${sectionTitle('Running: Speed Curve')}${chartCanvasBlock('analytics-speed-curve')}</div>`);
+        } else {
+            cardList.push(analyticsEmptyState('2 running'));
+        }
+
+        const todayKinCount = (running?.running?.splits || []).filter((s) => s?.kinematics).length;
+        if (todayKinCount >= 1) {
+            cardList.push(`<div class="card">${sectionTitle('Running: Kinematics Radar')}${chartCanvasBlock('analytics-kin-radar')}</div>`);
+        } else {
+            cardList.push(analyticsEmptyState('1 running with kinematics'));
+        }
+
+        if (lifting) {
+            cardList.push(`<div class="card">${sectionTitle('Strength vs Personal Best')}${chartCanvasBlock('analytics-e1rm-gauge')}</div>`);
+            cardList.push(`<div class="card">${sectionTitle('Loading Profile')}${chartCanvasBlock('analytics-set-load')}</div>`);
+        } else {
+            cardList.push(analyticsEmptyState('1 weightlifting'));
+            cardList.push(analyticsEmptyState('1 weightlifting'));
+        }
+
+        const hasPeakPower = (lifting?.lifting?.exercises || []).some((ex) => (ex?.sets || []).some((set) => (Number(set?.peakPower) || 0) > 0));
+        if (lifting && hasPeakPower) {
+            cardList.push(`<div class="card">${sectionTitle('Peak Power Output')}${chartCanvasBlock('analytics-peak-power')}</div>`);
+        } else {
+            cardList.push(analyticsEmptyState('1 weightlifting with power'));
+        }
+
+        if (day.measurement) {
+            cardList.push('<div class="card" id="analytics-daily-summary"></div>');
+        } else {
+            cardList.push(analyticsEmptyState('1 measurement'));
+        }
+
+        wrap.innerHTML = `<div class="analytics-grid">${cardList.join('')}</div>`;
+        const dateInput = document.getElementById('analytics-daily-date');
+        if (dateInput) {
+            dateInput.addEventListener('change', (e) => {
+                analyticsState.dailyDate = e.target.value || getLatestAnalyticsDate();
+                renderDailyView();
+                setTimeout(openDailyAccordion, 0);
+            });
+        }
+
+        renderDailyCharts(day, running, lifting);
+        renderDailySummaryCard(day);
+        setTimeout(openDailyAccordion, 0);
+    }
+
+    function renderDailyCharts(day, running, lifting) {
+        destroyAnalyticsChart('splitWaterfall');
+        destroyAnalyticsChart('speedCurve');
+        destroyAnalyticsChart('kinRadar');
+        destroyAnalyticsChart('e1rmGauge');
+        destroyAnalyticsChart('setLoad');
+        destroyAnalyticsChart('peakPower');
+        ['rmssd', 'sdnn', 'pnn50', 'meanHR'].forEach((k) => destroyAnalyticsChart(`spark-${k}`));
+
+        if (running && (running.running?.splits || []).length >= 1) {
+            const splits = (running.running?.splits || []).filter((s) => (Number(s?.distance) || 0) > 0 && (Number(s?.time) || 0) > 0);
+            const avgPace = (Number(running.running?.totalTime) || 0) / ((Number(running.running?.totalDistance) || 1));
+            const labels = splits.map((s, i) => s?.label || `Split ${i + 1}`);
+            const data = splits.map((s) => Number(s?.time) || 0);
+            const avgTimes = splits.map((s) => avgPace * (Number(s?.distance) || 0));
+            const colors = splits.map((s) => {
+                const pace = (Number(s?.time) || 0) / Math.max(1, (Number(s?.distance) || 0));
+                const ratio = avgPace > 0 ? pace / avgPace : 1;
+                if (ratio <= 0.95) return analyticsCss('--success');
+                if (ratio <= 1.05) return analyticsCss('--accent');
+                if (ratio > 1.2) return analyticsCss('--danger');
+                return analyticsCss('--warning');
+            });
+            const ctx = document.getElementById('analytics-split-waterfall');
+            if (ctx) {
+                analyticsCharts.splitWaterfall = new Chart(ctx, {
+                    type: 'bar',
+                    data: { labels, datasets: [{ data, backgroundColor: colors }] },
+                    options: {
+                        indexAxis: 'y',
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    label: (c) => {
+                                        const s = splits[c.dataIndex] || {};
+                                        const dist = Number(s?.distance) || 0;
+                                        const secs = Number(s?.time) || 0;
+                                        const pacePerKm = dist > 0 ? (secs / dist) * 1000 : 0;
+                                        const speed = secs > 0 ? (dist / secs) * 3.6 : 0;
+                                        return `${labels[c.dataIndex]} • ${formatDistanceHuman(dist)} • ${formatMMSS(secs)} • ${formatMMSS(pacePerKm)}/km • ${formatKmh(speed)}`;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: { title: { display: true, text: 'Time (s)' } },
+                            y: { ticks: { color: analyticsCss('--text-main') } }
+                        }
+                    },
+                    plugins: [splitAvgMarkerPlugin(avgTimes)]
+                });
+            }
+        }
+
+        if (running && (running.running?.splits || []).length >= 2) {
+            const splits = (running.running?.splits || []).filter((s) => (Number(s?.distance) || 0) > 0 && (Number(s?.time) || 0) > 0);
+            let cum = 0;
+            const xVals = splits.map((s) => {
+                cum += Number(s?.distance) || 0;
+                return cum;
+            });
+            const yVals = splits.map((s) => ((Number(s?.distance) || 0) / Math.max(1, Number(s?.time) || 0)) * 3.6);
+            const avgSpeed = ((Number(running.running?.totalDistance) || 0) / Math.max(1, Number(running.running?.totalTime) || 0)) * 3.6;
+            const ctx = document.getElementById('analytics-speed-curve');
+            if (ctx) {
+                analyticsCharts.speedCurve = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: xVals,
+                        datasets: [{
+                            label: 'Speed',
+                            data: yVals,
+                            borderColor: analyticsCss('--accent'),
+                            backgroundColor: analyticsCss('--accent-dim'),
+                            fill: true,
+                            tension: 0.25,
+                            pointRadius: 3
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            analyticsRefLines: { lines: [{ axis: 'y', value: avgSpeed, dash: [6, 4] }] },
+                            tooltip: {
+                                callbacks: {
+                                    label: (c) => {
+                                        const s = splits[c.dataIndex] || {};
+                                        return `Dist ${formatDistanceHuman(xVals[c.dataIndex])} • ${formatKmh(c.parsed.y)} • ${formatMMSS(s?.time || 0)}`;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: { title: { display: true, text: 'Cumulative Distance (m)' } },
+                            y: { title: { display: true, text: 'Speed (km/h)' } }
+                        }
+                    },
+                    plugins: [refLinePlugin()]
+                });
+            }
+        }
+
+        if (running && (running.running?.splits || []).some((s) => s?.kinematics)) {
+            const todayKinSplits = (running.running?.splits || []).filter((s) => s?.kinematics);
+            const avgMetric = (extractor) => {
+                const vals = todayKinSplits.map((s) => Number(extractor(s?.kinematics)) || 0).filter((v) => v > 0);
+                return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+            };
+            const todayData = [
+                avgMetric((k) => k?.gct),
+                avgMetric((k) => k?.ft),
+                avgMetric((k) => (Number(k?.sl) || 0) * 100),
+                avgMetric((k) => {
+                    const raw = Number(k?.sf) || 0;
+                    return raw > 0 && raw <= 20 ? raw * 60 : raw;
+                }),
+                avgMetric((k) => k?.vo)
+            ];
+            const todayDist = Number(running.running?.totalDistance) || 0;
+            const pbCandidate = (appState.sessions || [])
+                .filter((s) => s?.type === 'running' && (s?.running?.splits || []).some((sp) => sp?.kinematics))
+                .filter((s) => sessionIdValue(s) !== sessionIdValue(running))
+                .sort((a, b) => {
+                    const da = Math.abs((Number(a?.running?.totalDistance) || 0) - todayDist);
+                    const db = Math.abs((Number(b?.running?.totalDistance) || 0) - todayDist);
+                    if (da !== db) return da - db;
+                    return (Number(a?.running?.totalTime) || Infinity) - (Number(b?.running?.totalTime) || Infinity);
+                })[0];
+
+            const datasets = [{
+                label: 'Today',
+                data: todayData,
+                borderColor: analyticsCss('--accent'),
+                backgroundColor: analyticsCss('--accent-dim')
+            }];
+            if (pbCandidate) {
+                const pbKin = (pbCandidate.running?.splits || []).filter((s) => s?.kinematics);
+                const avgPb = (extractor) => {
+                    const vals = pbKin.map((s) => Number(extractor(s?.kinematics)) || 0).filter((v) => v > 0);
+                    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+                };
+                datasets.push({
+                    label: 'Personal Best Session',
+                    data: [
+                        avgPb((k) => k?.gct),
+                        avgPb((k) => k?.ft),
+                        avgPb((k) => (Number(k?.sl) || 0) * 100),
+                        avgPb((k) => {
+                            const raw = Number(k?.sf) || 0;
+                            return raw > 0 && raw <= 20 ? raw * 60 : raw;
+                        }),
+                        avgPb((k) => k?.vo)
+                    ],
+                    borderColor: analyticsCss('--warning'),
+                    backgroundColor: 'transparent'
+                });
+            }
+            const ctx = document.getElementById('analytics-kin-radar');
+            if (ctx) {
+                analyticsCharts.kinRadar = new Chart(ctx, {
+                    type: 'radar',
+                    data: {
+                        labels: ['GCT (ms)', 'Flight Time (ms)', 'Stride Length (×100)', 'Stride Frequency (steps/min)', 'Vertical Oscillation (cm)'],
+                        datasets
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true } } }
+                });
+            }
+        }
+
+        if (lifting) {
+            const exercises = (lifting.lifting?.exercises || []).filter((ex) => (ex?.sets || []).length > 0);
+            const rows = exercises.map((ex) => {
+                const working = (ex.sets || []).filter((set) => (set?.type || 'working') !== 'warmup' && (Number(set?.load) || 0) > 0 && (Number(set?.reps) || 0) > 0);
+                const best = working.reduce((m, set) => Math.max(m, (Number(set.load) || 0) * (1 + (Number(set.reps) || 0) / 30)), 0);
+                const pb = Number(appState.personalBests?.gym?.[ex.name]?.e1rm) || 0;
+                const pct = pb > 0 ? (best / pb) * 100 : 100;
+                return { exercise: ex.name || 'Exercise', best, pb, pct, workingSets: working.length };
+            }).filter((r) => r.best > 0);
+            if (rows.length) {
+                const ctx = document.getElementById('analytics-e1rm-gauge');
+                if (ctx) {
+                    analyticsCharts.e1rmGauge = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: rows.map((r) => r.exercise),
+                            datasets: [{
+                                data: rows.map((r) => Math.min(110, r.pct)),
+                                backgroundColor: rows.map((r) => r.pct >= 95 ? analyticsCss('--success') : r.pct >= 80 ? analyticsCss('--accent') : r.pct >= 65 ? analyticsCss('--warning') : analyticsCss('--danger'))
+                            }]
+                        },
+                        options: {
+                            indexAxis: 'y',
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { display: false },
+                                analyticsRefLines: { lines: [{ axis: 'x', value: 100, dash: [6, 4] }] },
+                                tooltip: {
+                                    callbacks: {
+                                        label: (c) => {
+                                            const r = rows[c.dataIndex];
+                                            return `${r.exercise}: today e1RM ${formatKg(r.best)} = ${r.pct.toFixed(1)}% of PB ${formatKg(r.pb || r.best)}`;
+                                        }
+                                    }
+                                }
+                            },
+                            scales: { x: { min: 0, max: 110, ticks: { callback: (v) => `${v}%` } } }
+                        },
+                        plugins: [refLinePlugin()]
+                    });
+                }
+            }
+
+            const limited = exercises.slice(0, 6);
+            const maxSets = Math.max(1, ...limited.map((ex) => (ex?.sets || []).length));
+            const setCtx = document.getElementById('analytics-set-load');
+            if (setCtx && limited.length) {
+                analyticsCharts.setLoad = new Chart(setCtx, {
+                    type: 'line',
+                    data: {
+                        labels: Array.from({ length: maxSets }, (_, i) => i + 1),
+                        datasets: limited.map((ex, i) => {
+                            const sets = ex.sets || [];
+                            return {
+                                label: ex.name || `Exercise ${i + 1}`,
+                                data: Array.from({ length: maxSets }, (_, idx) => Number(sets[idx]?.load) || null),
+                                setTypes: Array.from({ length: maxSets }, (_, idx) => sets[idx]?.type || 'working'),
+                                tension: 0.15,
+                                pointRadius: 3
+                            };
+                        })
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: true } },
+                        scales: {
+                            x: { title: { display: true, text: 'Set Number' } },
+                            y: { title: { display: true, text: 'Load (kg)' } }
+                        },
+                        elements: {
+                            line: {
+                                borderWidth: 2
+                            }
+                        }
+                    }
+                });
+                analyticsCharts.setLoad.data.datasets.forEach((ds) => {
+                    ds.segment = {
+                        borderDash: (ctx) => {
+                            const idx = ctx.p0DataIndex;
+                            return ds.setTypes[idx] === 'warmup' ? [6, 4] : [];
+                        }
+                    };
+                });
+                analyticsCharts.setLoad.update();
+            }
+
+            const peakRows = [];
+            (lifting.lifting?.exercises || []).forEach((ex) => {
+                (ex?.sets || []).forEach((set, idx) => {
+                    const p = Number(set?.peakPower) || 0;
+                    if (p > 0) peakRows.push({ label: `${ex?.name || 'Exercise'} — Set ${idx + 1}`, power: p });
+                });
+            });
+            if (peakRows.length) {
+                const maxPower = Math.max(...peakRows.map((r) => r.power), 1);
+                const ctx = document.getElementById('analytics-peak-power');
+                if (ctx) {
+                    analyticsCharts.peakPower = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: peakRows.map((r) => r.label),
+                            datasets: [{
+                                data: peakRows.map((r) => r.power),
+                                backgroundColor: peakRows.map((r) => r.power >= maxPower * 0.9 ? analyticsCss('--success') : r.power >= maxPower * 0.7 ? analyticsCss('--accent') : analyticsCss('--danger'))
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { display: false },
+                                analyticsRefLines: { lines: [{ axis: 'y', value: maxPower * 0.9, dash: [6, 4] }] },
+                                tooltip: { callbacks: { label: (c) => `${(Number(c.parsed.y) || 0).toFixed(1)} W` } }
+                            },
+                            scales: { y: { title: { display: true, text: 'Watts' } } }
+                        },
+                        plugins: [refLinePlugin()]
+                    });
+                }
+            }
+        }
+    }
+
+    function renderDailySummaryCard(day) {
+        const host = document.getElementById('analytics-daily-summary');
+        if (!host || !day?.measurement) return;
+        const m = day.measurement;
+        const readiness = Number(m?.readiness) || 0;
+        const readinessColor = readiness >= 70 ? 'var(--success)' : readiness >= 40 ? 'var(--warning)' : 'var(--danger)';
+        const rows = (appState.measurements || []).slice(-14);
+        const selectedSession = (day.sessions || [])[0] || null;
+        const loadUnits = getSessionLoadUnits(selectedSession);
+        const sessionSummary = selectedSession ? `
+            <div style="margin-top:10px; padding-top:10px; border-top:1px solid var(--border); font-size:0.85rem; color:var(--text-main);">
+                <div><strong>${analyticsIconForType(selectedSession.type)} ${escapeHtml(selectedSession.title || 'Session')}</strong></div>
+                <div style="display:flex; gap:8px; align-items:center; margin-top:4px;">
+                    <span class="badge ${((Number(selectedSession?.rpe) || 0) >= 8) ? 'bg-red' : ((Number(selectedSession?.rpe) || 0) >= 5) ? 'bg-amber' : 'bg-green'}">RPE ${Number(selectedSession?.rpe) || 0}</span>
+                    <span style="color:var(--text-muted);">Load Units: ${loadUnits.toFixed(1)}</span>
+                </div>
+            </div>
+        ` : '';
+
+        host.innerHTML = `
+            ${sectionTitle('Daily HRV + Session Summary')}
+            <div style="display:flex; align-items:center; gap:12px; margin-bottom:10px;">
+                <div style="width:56px; height:56px; border-radius:50%; border:4px solid ${readinessColor}; display:flex; align-items:center; justify-content:center; font-weight:700; color:var(--text-main);">${Math.round(readiness)}</div>
+                <div style="font-size:0.9rem; color:var(--text-muted);">Readiness Score</div>
+            </div>
+            <div class="analytics-metric-grid">
+                <div class="analytics-metric-card"><strong>${Math.round(Number(m?.rmssd) || 0)}</strong><div style="font-size:0.75rem; color:var(--text-muted);">RMSSD</div>${chartCanvasBlock('analytics-spark-rmssd')}</div>
+                <div class="analytics-metric-card"><strong>${Math.round(Number(m?.sdnn) || 0)}</strong><div style="font-size:0.75rem; color:var(--text-muted);">SDNN</div>${chartCanvasBlock('analytics-spark-sdnn')}</div>
+                <div class="analytics-metric-card"><strong>${(Number(m?.pnn50) || 0).toFixed(1)}</strong><div style="font-size:0.75rem; color:var(--text-muted);">pNN50</div>${chartCanvasBlock('analytics-spark-pnn50')}</div>
+                <div class="analytics-metric-card"><strong>${Math.round(Number(m?.meanHR) || 0)}</strong><div style="font-size:0.75rem; color:var(--text-muted);">Mean HR</div>${chartCanvasBlock('analytics-spark-meanHR')}</div>
+            </div>
+            ${sessionSummary}
+        `;
+        ['rmssd', 'sdnn', 'pnn50', 'meanHR'].forEach((metric) => {
+            const ctx = document.getElementById(`analytics-spark-${metric}`);
+            if (!ctx) return;
+            const pts = rows.map((x) => Number(x?.[metric]) || 0);
+            analyticsCharts[`spark-${metric}`] = new Chart(ctx, {
+                type: 'line',
+                data: { labels: pts.map(() => ''), datasets: [{ data: pts, borderColor: analyticsCss('--accent'), backgroundColor: analyticsCss('--accent-dim'), fill: true, pointRadius: 0, tension: 0.35 }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { enabled: false } }, scales: { x: { display: false }, y: { display: false } } }
+            });
+        });
+    }
+
+    function renderWeeklyView() {
+        const host = document.getElementById('analytics-weekly-content');
+        if (!host) return;
+        const baseWeek = startOfISOWeek(addDays(new Date(), analyticsState.weekOffset * 7));
+        const days = Array.from({ length: 7 }, (_, i) => addDays(baseWeek, i));
+        const dayKeys = days.map((d) => formatDateKey(d));
+        const weekNo = getISOWeekNumber(baseWeek);
+
+        host.innerHTML = `
+            <div class="analytics-grid">
+                <div class="card analytics-controls">
+                    <h3 style="font-size:1rem; margin:0; color:var(--text-main);">Week ${weekNo}</h3>
+                    <div style="display:flex; gap:8px;">
+                        <button type="button" class="nav-mini" id="analytics-prev-week">❮ Prev</button>
+                        <button type="button" class="nav-mini" id="analytics-next-week">Next ❯</button>
+                    </div>
+                </div>
+                <div class="card">${sectionTitle('Weekly Load & Readiness')}${chartCanvasBlock('analytics-week-load')}</div>
+                <div class="card">${sectionTitle(`HRV Trend — Week ${weekNo}`)}${chartCanvasBlock('analytics-week-rmssd')}</div>
+                <div class="card" id="analytics-week-speed-card"></div>
+                <div class="card" id="analytics-week-volume-card"></div>
+                <div class="card">${sectionTitle('Readiness vs RPE (8 weeks)')}${chartCanvasBlock('analytics-ready-rpe')}</div>
+            </div>
+        `;
+
+        document.getElementById('analytics-prev-week')?.addEventListener('click', () => { analyticsState.weekOffset -= 1; renderWeeklyView(); setTimeout(() => { const b = document.getElementById('analytics-weekly-body'); if (b) b.style.maxHeight = b.scrollHeight + 'px'; }, 0); });
+        document.getElementById('analytics-next-week')?.addEventListener('click', () => { analyticsState.weekOffset += 1; renderWeeklyView(); setTimeout(() => { const b = document.getElementById('analytics-weekly-body'); if (b) b.style.maxHeight = b.scrollHeight + 'px'; }, 0); });
+
+        destroyAnalyticsChart('weeklyLoad');
+        destroyAnalyticsChart('weeklyRmssd');
+        destroyAnalyticsChart('weeklySpeedTrend');
+        destroyAnalyticsChart('weeklyVolumeExercise');
+        destroyAnalyticsChart('readyRpe');
+
+        const sessionsByDay = dayKeys.map((key) => (appState.sessions || []).filter((s) => normalizeDate(s?.date) === key));
+        const readinessByDay = dayKeys.map((key) => Number((appState.measurements || []).find((m) => normalizeDate(m?.date) === key)?.readiness) || 0);
+        const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+        const typeLoad = (type) => sessionsByDay.map((arr) => arr.filter((s) => (type === 'other' ? !['running', 'weightlifting'].includes(s?.type) : s?.type === type)).reduce((sum, s) => sum + getSessionLoadUnits(s), 0));
+        const weekLoadCtx = document.getElementById('analytics-week-load');
+        if (weekLoadCtx) {
+            analyticsCharts.weeklyLoad = new Chart(weekLoadCtx, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [
+                        { label: 'Running', data: typeLoad('running'), backgroundColor: analyticsCss('--accent'), stack: 'load' },
+                        { label: 'Weightlifting', data: typeLoad('weightlifting'), backgroundColor: analyticsCss('--warning'), stack: 'load' },
+                        { label: 'Other', data: typeLoad('other'), backgroundColor: analyticsCss('--text-muted'), stack: 'load' },
+                        { label: 'Readiness', type: 'line', data: readinessByDay, borderColor: analyticsCss('--success'), yAxisID: 'y1', tension: 0.25, pointRadius: 3 }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                afterLabel: (c) => {
+                                    const daySessions = sessionsByDay[c.dataIndex] || [];
+                                    const readiness = readinessByDay[c.dataIndex] || 0;
+                                    if (!daySessions.length) return `Readiness: ${readiness}`;
+                                    return `${daySessions.map((s) => `${s.title || 'Session'}: ${getSessionLoadUnits(s).toFixed(1)} LU`).join(' | ')} | Readiness: ${readiness}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { stacked: true },
+                        y: { stacked: true, title: { display: true, text: 'Load Units' } },
+                        y1: { position: 'right', min: 0, max: 100, grid: { drawOnChartArea: false }, title: { display: true, text: 'Readiness' } }
+                    }
+                }
+            });
+        }
+
+        const weekMeas = dayKeys.map((key) => (appState.measurements || []).find((m) => normalizeDate(m?.date) === key) || null);
+        const rmssd = weekMeas.map((m) => Number(m?.rmssd) || null);
+        const avg28 = (() => {
+            const vals = (appState.measurements || []).slice(-28).map((m) => Number(m?.rmssd) || 0).filter((v) => v > 0);
+            return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+        })();
+        const sessionMarkers = dayKeys.map((k, i) => {
+            const daySessions = (appState.sessions || []).filter((s) => normalizeDate(s?.date) === k);
+            if (!daySessions.length) return null;
+            const rpe = Math.max(...daySessions.map((s) => Number(s?.rpe) || 0), 0);
+            return { xLabel: labels[i], rpe };
+        }).filter(Boolean);
+        const weekRmssdCtx = document.getElementById('analytics-week-rmssd');
+        if (weekRmssdCtx) {
+            analyticsCharts.weeklyRmssd = new Chart(weekRmssdCtx, {
+                type: 'line',
+                data: { labels, datasets: [{ data: rmssd, borderColor: analyticsCss('--accent'), backgroundColor: analyticsCss('--accent-dim'), fill: true, tension: 0.25 }] },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        analyticsRefLines: { lines: [{ axis: 'y', value: avg28, dash: [6, 4] }] },
+                        tooltip: {
+                            callbacks: {
+                                label: (c) => {
+                                    const m = weekMeas[c.dataIndex];
+                                    const sess = sessionsByDay[c.dataIndex] || [];
+                                    const sTxt = sess.length ? ` | ${sess.map((s) => s.title || s.type).join(', ')}` : '';
+                                    return `RMSSD ${(Number(c.parsed.y) || 0).toFixed(1)} ms | Readiness ${Number(m?.readiness) || 0}${sTxt}`;
+                                }
+                            }
+                        }
+                    }
+                },
+                plugins: [
+                    refLinePlugin(),
+                    {
+                        id: 'weeklySessionVerticals',
+                        afterDraw(chart) {
+                            const ctx = chart.ctx;
+                            const area = chart.chartArea;
+                            const xScale = chart.scales.x;
+                            if (!ctx || !area || !xScale) return;
+                            sessionMarkers.forEach((m) => {
+                                const x = xScale.getPixelForValue(m.xLabel);
+                                ctx.save();
+                                ctx.strokeStyle = m.rpe >= 8 ? analyticsCss('--danger') : m.rpe >= 5 ? analyticsCss('--warning') : analyticsCss('--success');
+                                ctx.setLineDash([4, 4]);
+                                ctx.beginPath();
+                                ctx.moveTo(x, area.top);
+                                ctx.lineTo(x, area.bottom);
+                                ctx.stroke();
+                                ctx.restore();
+                            });
+                        }
+                    }
+                ]
+            });
+        }
+
+        const speedCard = document.getElementById('analytics-week-speed-card');
+        const running8w = (appState.sessions || []).filter((s) => s?.type === 'running' && (s?.running?.splits || []).length > 0 && (new Date(s.date) >= addDays(baseWeek, -7 * 7)));
+        if (!speedCard) return;
+        if (running8w.length < 2) {
+            speedCard.innerHTML = analyticsEmptyState('2 running');
+        } else {
+            speedCard.innerHTML = `${sectionTitle('Speed Trend by Distance')}${chartCanvasBlock('analytics-week-speed-trend')}`;
+            const standards = [100, 200, 400, 800, 1000, 1500, 3000, 5000, 10000];
+            const weekStarts = Array.from({ length: 8 }, (_, i) => addDays(baseWeek, (i - 7) * 7));
+            const weekLabels = weekStarts.map((d) => `W${getISOWeekNumber(d)}`);
+            const distanceMap = new Map();
+            running8w.forEach((s) => {
+                const sw = startOfISOWeek(new Date(s.date || new Date()));
+                const weekIdx = weekStarts.findIndex((w) => formatDateKey(w) === formatDateKey(sw));
+                if (weekIdx < 0) return;
+                (s.running?.splits || []).forEach((sp) => {
+                    const dist = Number(sp?.distance) || 0;
+                    const time = Number(sp?.time) || 0;
+                    if (!dist || !time) return;
+                    let nearest = null;
+                    let err = Infinity;
+                    standards.forEach((d) => {
+                        const rel = Math.abs(dist - d) / d;
+                        if (rel <= 0.02 && rel < err) { err = rel; nearest = d; }
+                    });
+                    if (!nearest) return;
+                    const key = `${nearest}m`;
+                    if (!distanceMap.has(key)) distanceMap.set(key, Array.from({ length: 8 }, () => ({ time: null, hasPb: false })));
+                    const slot = distanceMap.get(key)[weekIdx];
+                    if (slot.time == null || time < slot.time) {
+                        slot.time = time;
+                        slot.hasPb = !!s.hasPB;
+                    }
+                });
+            });
+            const selectedLines = [...distanceMap.entries()].sort((a, b) => b[1].filter((x) => x.time != null).length - a[1].filter((x) => x.time != null).length).slice(0, 5);
+            const ctx = document.getElementById('analytics-week-speed-trend');
+            if (ctx) {
+                analyticsCharts.weeklySpeedTrend = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: weekLabels,
+                        datasets: selectedLines.map(([distKey, pts]) => ({
+                            label: distKey,
+                            data: pts.map((p) => p.time),
+                            pointStyle: pts.map((p) => p.hasPb ? 'star' : 'circle'),
+                            pointRadius: pts.map((p) => p.hasPb ? 6 : 3),
+                            spanGaps: true,
+                            tension: 0.2
+                        }))
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: { y: { reverse: true, title: { display: true, text: 'Best split time (s)' } } }
+                    }
+                });
+            }
+        }
+
+        const volumeCard = document.getElementById('analytics-week-volume-card');
+        const weekLifts = (appState.sessions || []).filter((s) => s?.type === 'weightlifting' && dayKeys.includes(normalizeDate(s?.date)));
+        if (!volumeCard) return;
+        if (!weekLifts.length) {
+            volumeCard.innerHTML = analyticsEmptyState('1 weightlifting');
+        } else {
+            volumeCard.innerHTML = `${sectionTitle('Weekly Volume by Exercise')}${chartCanvasBlock('analytics-week-volume')}`;
+            const volume = {};
+            const setCount = {};
+            weekLifts.forEach((s) => {
+                (s.lifting?.exercises || []).forEach((ex) => {
+                    const name = ex?.name || 'Exercise';
+                    (ex?.sets || []).forEach((set) => {
+                        if ((set?.type || 'working') === 'warmup') return;
+                        const v = (Number(set?.reps) || 0) * (Number(set?.load) || 0);
+                        volume[name] = (volume[name] || 0) + v;
+                        setCount[name] = (setCount[name] || 0) + 1;
+                    });
+                });
+            });
+            const names = Object.keys(volume);
+            const avg4 = {};
+            names.forEach((name) => {
+                let totals = [];
+                for (let i = 0; i < 4; i++) {
+                    const ws = startOfISOWeek(addDays(baseWeek, -i * 7));
+                    const we = addDays(ws, 6);
+                    const val = (appState.sessions || []).filter((s) => s?.type === 'weightlifting').filter((s) => {
+                        const d = new Date(s.date || 0);
+                        return d >= ws && d <= we;
+                    }).reduce((sum, s) => {
+                        return sum + (s.lifting?.exercises || []).filter((ex) => (ex?.name || 'Exercise') === name).reduce((inner, ex) => inner + (ex?.sets || []).reduce((setSum, set) => ((set?.type || 'working') === 'warmup' ? setSum : setSum + (Number(set?.reps) || 0) * (Number(set?.load) || 0)), 0), 0);
+                    }, 0);
+                    totals.push(val);
+                }
+                avg4[name] = totals.length ? totals.reduce((a, b) => a + b, 0) / totals.length : 0;
+            });
+            const ctx = document.getElementById('analytics-week-volume');
+            if (ctx) {
+                analyticsCharts.weeklyVolumeExercise = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: names,
+                        datasets: [{
+                            data: names.map((n) => volume[n]),
+                            backgroundColor: names.map((n) => (volume[n] > (avg4[n] || 0) ? analyticsCss('--success') : analyticsCss('--accent')))
+                        }]
+                    },
+                    options: {
+                        indexAxis: 'y',
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    label: (c) => `${names[c.dataIndex]}: ${(Number(c.parsed.x) || 0).toFixed(1)} kg • ${setCount[names[c.dataIndex]] || 0} working sets`
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+
+        const scatterPoints = (appState.sessions || []).filter((s) => {
+            const d = new Date(s?.date || 0);
+            return d >= addDays(baseWeek, -7 * 7) && d <= addDays(baseWeek, 6) && s?.readinessScore != null && s?.rpe != null;
+        }).map((s) => ({
+            x: Number(s.readinessScore) || 0,
+            y: Number(s.rpe) || 0,
+            date: normalizeDate(s?.date),
+            selected: dayKeys.includes(normalizeDate(s?.date))
+        }));
+        const readyCtx = document.getElementById('analytics-ready-rpe');
+        if (readyCtx) {
+            analyticsCharts.readyRpe = new Chart(readyCtx, {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        data: scatterPoints,
+                        backgroundColor: scatterPoints.map((p) => (p.x < 75 && p.y >= 7) ? analyticsCss('--danger') : analyticsCss('--accent')),
+                        pointRadius: scatterPoints.map((p) => p.selected ? 6 : 3)
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        analyticsRefLines: { lines: [{ axis: 'x', value: 75 }, { axis: 'y', value: 7 }] }
+                    },
+                    scales: {
+                        x: { min: 0, max: 100, title: { display: true, text: 'Readiness' } },
+                        y: { min: 1, max: 10, title: { display: true, text: 'RPE' } }
+                    }
+                },
+                plugins: [refLinePlugin(), quadrantLabelPlugin()]
+            });
+        }
+    }
+
+    function renderMonthlyView() {
+        const host = document.getElementById('analytics-monthly-content');
+        if (!host) return;
+        const base = new Date();
+        const monthDate = new Date(base.getFullYear(), base.getMonth() + analyticsState.monthOffset, 1);
+        const year = monthDate.getFullYear();
+        const month = monthDate.getMonth();
+        const monthLabel = monthDate.toLocaleString(undefined, { month: 'long', year: 'numeric' });
+
+        host.innerHTML = `
+            <div class="analytics-grid">
+                <div class="card analytics-controls">
+                    <h3 style="font-size:1rem; margin:0; color:var(--text-main);">${monthLabel}</h3>
+                    <div style="display:flex; gap:8px;">
+                        <button type="button" class="nav-mini" id="analytics-prev-month">❮ Prev</button>
+                        <button type="button" class="nav-mini" id="analytics-next-month">Next ❯</button>
+                    </div>
+                </div>
+                <div class="card" id="analytics-month-heatmap"></div>
+                <div class="card">${sectionTitle('Monthly Load Periodization')}${chartCanvasBlock('analytics-month-load')}</div>
+                <div class="card" id="analytics-month-e1rm-card"></div>
+                <div class="card" id="analytics-month-running-card"></div>
+                <div class="card">${sectionTitle('Volume Load & Strength Trend')}${chartCanvasBlock('analytics-month-volume-strength')}</div>
+                <div class="card">${sectionTitle('Session Distribution')}${chartCanvasBlock('analytics-month-distribution')}</div>
+            </div>
+        `;
+        document.getElementById('analytics-prev-month')?.addEventListener('click', () => { analyticsState.monthOffset -= 1; renderMonthlyView(); setTimeout(() => { const b = document.getElementById('analytics-monthly-body'); if (b) b.style.maxHeight = b.scrollHeight + 'px'; }, 0); });
+        document.getElementById('analytics-next-month')?.addEventListener('click', () => { analyticsState.monthOffset += 1; renderMonthlyView(); setTimeout(() => { const b = document.getElementById('analytics-monthly-body'); if (b) b.style.maxHeight = b.scrollHeight + 'px'; }, 0); });
+
+        ['monthLoad', 'monthE1rm', 'monthRunPr', 'monthVolumeStrength', 'monthDistribution'].forEach((k) => destroyAnalyticsChart(k));
+
+        const firstDay = new Date(year, month, 1);
+        const lastDay = new Date(year, month + 1, 0);
+        const daysInMonth = lastDay.getDate();
+        const monthSessions = (appState.sessions || []).filter((s) => {
+            const d = new Date(s?.date || 0);
+            return d.getFullYear() === year && d.getMonth() === month;
+        });
+        const monthMeasurements = (appState.measurements || []).filter((m) => {
+            const d = new Date(m?.date || 0);
+            return d.getFullYear() === year && d.getMonth() === month;
+        });
+
+        const heatmap = document.getElementById('analytics-month-heatmap');
+        if (heatmap) {
+            const weekdayShift = (firstDay.getDay() + 6) % 7;
+            let cellHtml = '';
+            for (let i = 0; i < weekdayShift; i++) cellHtml += `<div class="analytics-heatmap-cell empty"></div>`;
+            for (let d = 1; d <= daysInMonth; d++) {
+                const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                const m = monthMeasurements.find((x) => normalizeDate(x?.date) === dateKey);
+                const daySessions = monthSessions.filter((s) => normalizeDate(s?.date) === dateKey);
+                const readiness = Number(m?.readiness) || 0;
+                const bg = m ? `oklch(from var(--success) l c h / ${Math.max(0, Math.min(1, readiness / 100)).toFixed(2)})` : 'var(--card)';
+                const icon = daySessions.length ? analyticsIconForType(daySessions[0]?.type) : '○';
+                const hasPb = daySessions.some((s) => s?.hasPB);
+                cellHtml += `
+                    <button type="button" class="analytics-heatmap-cell" data-analytics-date="${dateKey}" style="background:${bg};">
+                        <span style="font-size:11px; color:var(--text-main);">${d}</span>
+                        ${hasPb ? '<span class="pb-star">★</span>' : ''}
+                        <span style="position:absolute; right:4px; bottom:2px; font-size:10px; color:var(--text-muted);">${icon}</span>
+                    </button>
+                `;
+            }
+            heatmap.innerHTML = `
+                ${sectionTitle('Monthly Calendar Heatmap')}
+                <div class="analytics-heatmap-grid">
+                    <div class="cal-header">Mon</div><div class="cal-header">Tue</div><div class="cal-header">Wed</div><div class="cal-header">Thu</div><div class="cal-header">Fri</div><div class="cal-header">Sat</div><div class="cal-header">Sun</div>
+                </div>
+                <div class="analytics-heatmap-grid" style="margin-top:4px;">${cellHtml}</div>
+                <div style="margin-top:8px;">
+                    <div class="analytics-heatmap-legend"></div>
+                    <div style="display:flex; justify-content:space-between; font-size:0.75rem; color:var(--text-muted); margin-top:4px;"><span>Low</span><span>High readiness</span></div>
+                </div>
+            `;
+            heatmap.querySelectorAll('[data-analytics-date]').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    analyticsState.dailyDate = btn.getAttribute('data-analytics-date');
+                    renderDailyView();
+                    openDailyAccordion();
+                    const dailySection = document.querySelector('.analytics-section');
+                    if (dailySection) dailySection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                });
+            });
+        }
+
+        const weekBucketCount = Math.ceil(daysInMonth / 7);
+        const weekLabels = Array.from({ length: weekBucketCount }, (_, i) => `Week ${i + 1}`);
+        const weekLoads = Array.from({ length: weekBucketCount }, () => 0);
+        monthSessions.forEach((s) => {
+            const day = new Date(s.date || 0).getDate();
+            const idx = Math.min(weekBucketCount - 1, Math.floor((day - 1) / 7));
+            weekLoads[idx] += getSessionLoadUnits(s);
+        });
+        const last4WeeksStart = startOfISOWeek(addDays(lastDay, -21));
+        const rolling4 = [];
+        for (let i = 0; i < 4; i++) {
+            const ws = addDays(last4WeeksStart, i * 7);
+            const we = addDays(ws, 6);
+            rolling4.push((appState.sessions || []).filter((s) => {
+                const d = new Date(s?.date || 0);
+                return d >= ws && d <= we;
+            }).reduce((sum, s) => sum + getSessionLoadUnits(s), 0));
+        }
+        const avg4Load = rolling4.length ? rolling4.reduce((a, b) => a + b, 0) / rolling4.length : 0;
+        const monthLoadCtx = document.getElementById('analytics-month-load');
+        if (monthLoadCtx) {
+            analyticsCharts.monthLoad = new Chart(monthLoadCtx, {
+                type: 'bar',
+                data: {
+                    labels: weekLabels,
+                    datasets: [{
+                        data: weekLoads,
+                        backgroundColor: weekLoads.map((v) => v > avg4Load * 1.3 ? analyticsCss('--danger') : v < avg4Load * 0.6 ? analyticsCss('--text-muted') : analyticsCss('--accent'))
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false }, analyticsRefLines: { lines: [{ axis: 'y', value: avg4Load }] } },
+                    scales: { y: { title: { display: true, text: 'Load Units' } } }
+                },
+                plugins: [refLinePlugin()]
+            });
+        }
+
+        const e1rmCard = document.getElementById('analytics-month-e1rm-card');
+        const lifts90 = (appState.sessions || []).filter((s) => s?.type === 'weightlifting' && new Date(s?.date || 0) >= addDays(new Date(), -90));
+        if (!e1rmCard) return;
+        if (lifts90.length < 2) {
+            e1rmCard.innerHTML = analyticsEmptyState('2 weightlifting');
+        } else {
+            const exKeys = Object.keys(appState.personalBests?.gym || {}).slice(0, 6);
+            e1rmCard.innerHTML = `${sectionTitle('Strength Progression — 90 Days')}${chartCanvasBlock('analytics-month-e1rm')}`;
+            const datasets = exKeys.map((ex) => {
+                const points = lifts90.map((s) => {
+                    const exObj = (s.lifting?.exercises || []).find((e) => e?.name === ex);
+                    if (!exObj) return null;
+                    const best = (exObj.sets || []).filter((set) => (set?.type || 'working') !== 'warmup').reduce((m, set) => Math.max(m, (Number(set?.load) || 0) * (1 + (Number(set?.reps) || 0) / 30)), 0);
+                    if (!best) return null;
+                    return { x: normalizeDate(s?.date), y: best, hasPb: !!s?.hasPB };
+                }).filter(Boolean);
+                return {
+                    label: ex,
+                    data: points,
+                    tension: 0.2,
+                    spanGaps: true,
+                    pointStyle: points.map((p) => p.hasPb ? 'star' : 'circle'),
+                    pointRadius: points.map((p) => p.hasPb ? 6 : 3)
+                };
+            }).filter((ds) => ds.data.length > 0);
+            const lines = exKeys.map((ex) => ({ axis: 'y', value: Number(appState.personalBests?.gym?.[ex]?.e1rm) || 0, dash: [4, 4] })).filter((l) => l.value > 0);
+            const ctx = document.getElementById('analytics-month-e1rm');
+            if (ctx) {
+                const labels = Array.from(new Set(datasets.flatMap((ds) => ds.data.map((p) => p.x))));
+                datasets.forEach((ds) => {
+                    const byDate = new Map(ds.data.map((p) => [p.x, p]));
+                    ds.data = labels.map((lbl) => byDate.get(lbl)?.y ?? null);
+                    ds.pointStyle = labels.map((lbl) => byDate.get(lbl)?.hasPb ? 'star' : 'circle');
+                    ds.pointRadius = labels.map((lbl) => byDate.get(lbl)?.hasPb ? 6 : 3);
+                });
+                analyticsCharts.monthE1rm = new Chart(ctx, {
+                    type: 'line',
+                    data: { labels, datasets },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { analyticsRefLines: { lines } },
+                        scales: {
+                            x: { ticks: { maxRotation: 0, autoSkip: true } },
+                            y: { title: { display: true, text: 'e1RM (kg)' } }
+                        }
+                    },
+                    plugins: [refLinePlugin()]
+                });
+            }
+        }
+
+        const runCard = document.getElementById('analytics-month-running-card');
+        const run90 = (appState.sessions || []).filter((s) => s?.type === 'running' && new Date(s?.date || 0) >= addDays(new Date(), -90) && !!s?.hasPB && (s?.running?.splits || []).length > 0);
+        if (!runCard) return;
+        if (run90.length < 2) {
+            runCard.innerHTML = analyticsEmptyState('2 running');
+        } else {
+            const trackKeys = Object.keys(appState.personalBests?.track || {}).slice(0, 5);
+            runCard.innerHTML = `${sectionTitle('Speed Progression by Distance — 90 Days')}${chartCanvasBlock('analytics-month-running')}`;
+            const distanceToMeters = (k) => {
+                if (k === '1 Mile') return 1609;
+                const n = parseFloat(String(k).replace('m', ''));
+                return Number.isFinite(n) ? n : 0;
+            };
+            const datasets = trackKeys.map((k) => {
+                const target = distanceToMeters(k);
+                const points = run90.map((s) => {
+                    let best = null;
+                    (s.running?.splits || []).forEach((sp) => {
+                        const dist = Number(sp?.distance) || 0;
+                        const time = Number(sp?.time) || 0;
+                        if (!dist || !time || !target) return;
+                        if (Math.abs(dist - target) / target <= 0.02 && (best == null || time < best)) best = time;
+                    });
+                    if (best == null) return null;
+                    return { x: normalizeDate(s?.date), y: best, hasPb: !!s?.hasPB };
+                }).filter(Boolean);
+                return { label: k, data: points, spanGaps: true, tension: 0.15, pointStyle: points.map((p) => p.hasPb ? 'star' : 'circle'), pointRadius: points.map((p) => p.hasPb ? 6 : 3) };
+            }).filter((d) => d.data.length > 0);
+            const ctx = document.getElementById('analytics-month-running');
+            if (ctx) {
+                const labels = Array.from(new Set(datasets.flatMap((ds) => ds.data.map((p) => p.x))));
+                datasets.forEach((ds) => {
+                    const byDate = new Map(ds.data.map((p) => [p.x, p]));
+                    ds.data = labels.map((lbl) => byDate.get(lbl)?.y ?? null);
+                    ds.pointStyle = labels.map((lbl) => byDate.get(lbl)?.hasPb ? 'star' : 'circle');
+                    ds.pointRadius = labels.map((lbl) => byDate.get(lbl)?.hasPb ? 6 : 3);
+                });
+                analyticsCharts.monthRunPr = new Chart(ctx, {
+                    type: 'line',
+                    data: { labels, datasets },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: { ticks: { maxRotation: 0, autoSkip: true } },
+                            y: { reverse: true, ticks: { callback: (v) => formatMMSS(v) } }
+                        }
+                    }
+                });
+            }
+        }
+
+        const weeks12 = Array.from({ length: 12 }, (_, i) => startOfISOWeek(addDays(new Date(), (i - 11) * 7)));
+        const labels12 = weeks12.map((w) => `W${getISOWeekNumber(w)}`);
+        const volume12 = [];
+        const avgE1rm12 = [];
+        weeks12.forEach((ws) => {
+            const we = addDays(ws, 6);
+            const lifts = (appState.sessions || []).filter((s) => s?.type === 'weightlifting').filter((s) => {
+                const d = new Date(s?.date || 0);
+                return d >= ws && d <= we;
+            });
+            let totalVol = 0;
+            const e1rmVals = [];
+            lifts.forEach((s) => {
+                (s.lifting?.exercises || []).forEach((ex) => {
+                    let exBest = 0;
+                    (ex?.sets || []).forEach((set) => {
+                        if ((set?.type || 'working') !== 'warmup') {
+                            totalVol += (Number(set?.reps) || 0) * (Number(set?.load) || 0);
+                            exBest = Math.max(exBest, (Number(set?.load) || 0) * (1 + (Number(set?.reps) || 0) / 30));
+                        }
+                    });
+                    if (exBest > 0) e1rmVals.push(exBest);
+                });
+            });
+            volume12.push(totalVol);
+            avgE1rm12.push(e1rmVals.length ? e1rmVals.reduce((a, b) => a + b, 0) / e1rmVals.length : null);
+        });
+        const volAvg4 = volume12.slice(-4).reduce((a, b) => a + b, 0) / Math.max(1, volume12.slice(-4).length);
+        const volCtx = document.getElementById('analytics-month-volume-strength');
+        if (volCtx) {
+            analyticsCharts.monthVolumeStrength = new Chart(volCtx, {
+                data: {
+                    labels: labels12,
+                    datasets: [
+                        {
+                            type: 'bar',
+                            label: 'Volume Load',
+                            data: volume12,
+                            backgroundColor: volume12.map((v) => v > volAvg4 * 1.3 ? analyticsCss('--danger') : v < volAvg4 * 0.6 ? analyticsCss('--text-muted') : analyticsCss('--accent'))
+                        },
+                        { type: 'line', label: 'Avg e1RM', data: avgE1rm12, borderColor: analyticsCss('--warning'), yAxisID: 'y1', tension: 0.2 }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { title: { display: true, text: 'Volume (kg)' } },
+                        y1: { position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: 'Avg e1RM (kg)' } }
+                    }
+                }
+            });
+        }
+
+        const countRunning = monthSessions.filter((s) => s?.type === 'running').length;
+        const countLifting = monthSessions.filter((s) => s?.type === 'weightlifting').length;
+        const countOther = monthSessions.filter((s) => !['running', 'weightlifting'].includes(s?.type)).length;
+        const sessionDays = new Set(monthSessions.map((s) => normalizeDate(s?.date)).filter(Boolean));
+        const restDays = Math.max(0, daysInMonth - sessionDays.size);
+        const distCtx = document.getElementById('analytics-month-distribution');
+        if (distCtx) {
+            analyticsCharts.monthDistribution = new Chart(distCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Running', 'Weightlifting', 'Other', 'Rest Days'],
+                    datasets: [{
+                        data: [countRunning, countLifting, countOther, restDays],
+                        backgroundColor: [analyticsCss('--accent'), analyticsCss('--warning'), analyticsCss('--text-muted'), analyticsCss('--border')]
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } },
+                plugins: [donutCenterPlugin(monthSessions.length)]
+            });
+        }
+    }
+
+    function renderAnalytics() {
+        const view = document.getElementById('view-analytics');
+        if (!view) return;
+        Chart.defaults.color = analyticsCss('--text-muted');
+        Chart.defaults.borderColor = analyticsCss('--border');
+        Chart.defaults.font.family = 'Inter';
+        Chart.defaults.font.size = 12;
+        if (!analyticsState.dailyDate) analyticsState.dailyDate = getLatestAnalyticsDate();
+        destroyAllAnalyticsCharts();
+        view.innerHTML = `
+            <div class="analytics-section">
+                <button type="button" class="accordion-toggle" onclick="toggleAccordion('analytics-daily-body')"><span>Daily</span><span>▾</span></button>
+                <div id="analytics-daily-body" class="accordion-body"><div id="analytics-daily-content"></div></div>
+            </div>
+            <div class="analytics-section">
+                <button type="button" class="accordion-toggle" onclick="toggleAccordion('analytics-weekly-body')"><span>Weekly</span><span>▾</span></button>
+                <div id="analytics-weekly-body" class="accordion-body"><div id="analytics-weekly-content"></div></div>
+            </div>
+            <div class="analytics-section">
+                <button type="button" class="accordion-toggle" onclick="toggleAccordion('analytics-monthly-body')"><span>Monthly</span><span>▾</span></button>
+                <div id="analytics-monthly-body" class="accordion-body"><div id="analytics-monthly-content"></div></div>
+            </div>
+        `;
+        renderDailyView();
+        renderWeeklyView();
+        renderMonthlyView();
+        ensureAccordionState();
+    }
+    window.renderAnalytics = renderAnalytics;

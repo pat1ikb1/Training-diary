@@ -252,6 +252,83 @@
 
         /* Chart container */
         .chart-container { position: relative; height: 200px; width: 100%; }
+        .analytics-section .accordion-toggle {
+            background: var(--card);
+            color: var(--text-main);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            justify-content: space-between;
+            font-size: 1rem;
+            font-weight: 600;
+            min-height: 42px;
+            padding: 10px 12px;
+        }
+        .analytics-section .accordion-body {
+            overflow: hidden;
+            max-height: 0;
+            transition: max-height 0.25s ease;
+        }
+        .analytics-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding-top: 12px;
+        }
+        .analytics-empty-state {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-muted);
+            font-size: 0.86rem;
+        }
+        .analytics-controls {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .analytics-controls .nav-mini {
+            width: auto;
+            min-height: 34px;
+            padding: 6px 10px;
+            font-size: 0.85rem;
+        }
+        .analytics-metric-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        .analytics-metric-card {
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--bg);
+            padding: 8px;
+        }
+        .analytics-heatmap-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 4px;
+        }
+        .analytics-heatmap-cell {
+            min-height: 48px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 4px;
+            position: relative;
+            cursor: pointer;
+        }
+        .analytics-heatmap-cell.empty {
+            background: transparent;
+            border-color: transparent;
+            cursor: default;
+        }
+        .analytics-heatmap-legend {
+            height: 10px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: linear-gradient(90deg, var(--bg), var(--success));
+        }
 
         /* End Nav */
 
