@@ -483,7 +483,9 @@
         if (calendarDetails) {
             calendarDetails.addEventListener('click', (e) => {
                 const editBtn = e.target.closest('button[data-session-edit-id]');
+                const delBtn = e.target.closest('button[data-session-id]');
                 if (editBtn?.dataset.sessionEditId) startSessionEdit(editBtn.dataset.sessionEditId, 'calendar');
+                if (delBtn?.dataset.sessionId) deleteSession(delBtn.dataset.sessionId);
             });
         }
 
@@ -1190,7 +1192,7 @@
         }
     }
 
-    function addRunSplit() {
+    function addRunSplit(presetSplit = null) {
         let tbody = qs('#run-splits-table tbody');
         const spikesDefault = getDefaultSpikesForCurrentSession();
         let tr = document.createElement('tr');
@@ -1208,6 +1210,7 @@
             <td class="split-kmh">--</td><td class="split-ms">--</td>
             <td style="display:flex; gap:2px; align-items:center;">
                 <button class="kin-toggle-btn" onclick="toggleSplitKin(this)">Kin ▾</button>
+                <button style="padding:4px; min-height:unset; width:auto;" onclick="duplicateRunSplitRow(this)" title="Duplicate split">⎘</button>
                 <button style="padding:4px; min-height:unset; width:auto;" onclick="removeSplitRow(this)">✕</button>
             </td>
         `;
@@ -1235,6 +1238,8 @@
         }));
         tbody.appendChild(tr);
         tbody.appendChild(kinTr);
+        if (presetSplit) populateRunSplitRow(tr, kinTr, presetSplit);
+        return { tr, kinTr };
     }
 
     function removeSplitRow(btn) {
@@ -1242,6 +1247,52 @@
         let kinRow = dataRow.nextElementSibling;
         if(kinRow && kinRow.classList.contains('split-kin-row')) kinRow.remove();
         dataRow.remove();
+        recalcRunTotals();
+    }
+
+    function populateRunSplitRow(tr, kinTr, split) {
+        if (!tr || !split) return;
+        tr.querySelector('.split-spikes').value = getSplitSpikesValue(split);
+        tr.querySelector('.split-dist').value = split.distance || '';
+        tr.querySelector('.split-time').value = formatSplitInputSeconds(split.time);
+        tr.querySelector('.split-rest').value = formatRestInput(split.rest);
+        const dist = parseFloat(tr.querySelector('.split-dist').value);
+        const secs = parseTime(tr.querySelector('.split-time').value);
+        if (dist && secs) {
+            const speedMs = dist / secs;
+            tr.querySelector('.split-ms').innerText = speedMs.toFixed(2);
+            tr.querySelector('.split-kmh').innerText = (speedMs * 3.6).toFixed(1);
+        }
+        if (kinTr && kinTr.classList.contains('split-kin-row') && split.kinematics) {
+            kinTr.querySelector('.kin-gct').value = split.kinematics.gct || '';
+            kinTr.querySelector('.kin-ft').value = split.kinematics.ft || '';
+            kinTr.querySelector('.kin-sl').value = split.kinematics.sl || '';
+            kinTr.querySelector('.kin-sf').value = split.kinematics.sf || '';
+            kinTr.querySelector('.kin-vo').value = split.kinematics.vo || '';
+        }
+    }
+
+    function duplicateRunSplitRow(btn) {
+        const tr = btn.closest('tr');
+        const kinTr = tr?.nextElementSibling;
+        if (!tr) return;
+        const cloneData = {
+            spikes: tr.querySelector('.split-spikes')?.value === 'no' ? 'no' : 'yes',
+            distance: parseFloat(tr.querySelector('.split-dist')?.value) || 0,
+            time: parseTime(tr.querySelector('.split-time')?.value),
+            rest: parseRestSeconds(tr.querySelector('.split-rest')?.value) || 0,
+            kinematics: kinTr && kinTr.classList.contains('split-kin-row') ? {
+                gct: parseFloat(kinTr.querySelector('.kin-gct')?.value) || null,
+                ft: parseFloat(kinTr.querySelector('.kin-ft')?.value) || null,
+                sl: parseFloat(kinTr.querySelector('.kin-sl')?.value) || null,
+                sf: parseFloat(kinTr.querySelector('.kin-sf')?.value) || null,
+                vo: parseFloat(kinTr.querySelector('.kin-vo')?.value) || null
+            } : null
+        };
+        if (cloneData.kinematics && !Object.values(cloneData.kinematics).some((v) => Number.isFinite(v) && v > 0)) {
+            cloneData.kinematics = null;
+        }
+        addRunSplit(cloneData);
         recalcRunTotals();
     }
 
@@ -1292,17 +1343,17 @@
             <button style="position:absolute; top:8px; right:8px; padding:4px; width:auto; min-height:unset;" onclick="this.closest('.card').remove()">✕</button>
             <input class="ex-name" type="text" list="exercise-list" placeholder="Exercise Name..." style="margin-bottom:10px; width: 85%;">
             <table class="data-table">
-                <thead><tr><th>Reps</th><th>Load</th><th>Type</th><th></th><th></th></tr></thead>
+                <thead><tr><th>Reps</th><th>Load</th><th>Type</th><th></th><th></th><th></th></tr></thead>
                 <tbody></tbody>
             </table>
-            <button style="margin-top:8px; min-height:30px; font-size:0.8rem; padding: 4px;" onclick="addExSet(this)">+ Add Set</button>
+            <button class="add-lift-set-btn" style="margin-top:8px; min-height:30px; font-size:0.8rem; padding: 4px;" onclick="addExSet(this)">+ Add Set</button>
         `;
         container.appendChild(card);
         // Add one default set
-        addExSet(card.querySelector('button:last-child'));
+        addExSet(card.querySelector('.add-lift-set-btn'));
     }
 
-    function addExSet(btn) {
+    function addExSet(btn, presetSet = null) {
         let tbody = btn.previousElementSibling.querySelector('tbody');
         let tr = document.createElement('tr');
         tr.className = 'set-data-row';
@@ -1311,17 +1362,46 @@
             <td><input type="number" step="any" class="set-load" placeholder="kg"></td>
             <td><select class="set-type"><option value="working">Work</option><option value="warmup">Warm</option></select></td>
             <td><button class="kin-toggle-btn" onclick="toggleLiftSetMetrics(this)">Set Metrics ▾</button></td>
+            <td><button style="padding:4px; min-height:unset;" onclick="duplicateLiftSetRow(this)" title="Duplicate set">⎘</button></td>
             <td><button style="padding:4px; min-height:unset;" onclick="removeLiftSetRow(this)">✕</button></td>
         `;
         const metricsTr = document.createElement('tr');
         metricsTr.className = 'split-kin-row';
-        metricsTr.innerHTML = `<td colspan="5"><div class="split-kin-body">
+        metricsTr.innerHTML = `<td colspan="6"><div class="split-kin-body">
             <input type="number" step="any" class="set-peak" placeholder="Peak Watt (W)">
-            <input type="number" step="any" class="set-mpv" placeholder="MPV (m/s)">
-            <input type="number" step="any" class="set-rfd" placeholder="RFD">
+            <input type="number" step="any" class="set-mpv" placeholder="MPV (W)">
+            <input type="number" step="any" class="set-rom-cm" placeholder="ROM (cm)">
+            <input type="number" step="any" class="set-bar-speed" placeholder="Bar speed (m/s)">
         </div></td>`;
         tbody.appendChild(tr);
         tbody.appendChild(metricsTr);
+        if (presetSet) {
+            tr.querySelector('.set-reps').value = presetSet.reps || '';
+            tr.querySelector('.set-load').value = presetSet.load || '';
+            tr.querySelector('.set-type').value = presetSet.type || 'working';
+            metricsTr.querySelector('.set-peak').value = presetSet.peakPower || '';
+            metricsTr.querySelector('.set-mpv').value = presetSet.mpv || '';
+            metricsTr.querySelector('.set-rom-cm').value = presetSet.romCm || '';
+            metricsTr.querySelector('.set-bar-speed').value = presetSet.barSpeed || '';
+        }
+    }
+
+    function duplicateLiftSetRow(btn) {
+        const row = btn.closest('tr');
+        const metricsRow = row?.nextElementSibling;
+        const card = row?.closest('.lift-ex-card');
+        const addBtn = card?.querySelector('.add-lift-set-btn');
+        if (!row || !addBtn) return;
+        const preset = {
+            reps: parseInt(row.querySelector('.set-reps')?.value) || 0,
+            load: parseFloat(row.querySelector('.set-load')?.value) || 0,
+            type: row.querySelector('.set-type')?.value || 'working',
+            peakPower: parseFloat(metricsRow?.querySelector('.set-peak')?.value) || null,
+            mpv: parseFloat(metricsRow?.querySelector('.set-mpv')?.value) || null,
+            romCm: parseFloat(metricsRow?.querySelector('.set-rom-cm')?.value) || null,
+            barSpeed: parseFloat(metricsRow?.querySelector('.set-bar-speed')?.value) || null
+        };
+        addExSet(addBtn, preset);
     }
 
     function toggleLiftSetMetrics(btn) {
@@ -1480,24 +1560,7 @@
             const tbody = qs('#run-splits-table tbody');
             tbody.innerHTML = '';
             const splits = Array.isArray(target.running?.splits) ? target.running.splits : [];
-            splits.forEach((split) => {
-                addRunSplit();
-                const rows = qsa('#run-splits-table tbody tr.split-data-row');
-                const tr = rows[rows.length - 1];
-                const kinTr = tr?.nextElementSibling;
-                if (!tr) return;
-                tr.querySelector('.split-spikes').value = getSplitSpikesValue(split);
-                tr.querySelector('.split-dist').value = split.distance || '';
-                tr.querySelector('.split-time').value = formatSplitInputSeconds(split.time);
-                tr.querySelector('.split-rest').value = formatRestInput(split.rest);
-                if (kinTr && kinTr.classList.contains('split-kin-row') && split.kinematics) {
-                    kinTr.querySelector('.kin-gct').value = split.kinematics.gct || '';
-                    kinTr.querySelector('.kin-ft').value = split.kinematics.ft || '';
-                    kinTr.querySelector('.kin-sl').value = split.kinematics.sl || '';
-                    kinTr.querySelector('.kin-sf').value = split.kinematics.sf || '';
-                    kinTr.querySelector('.kin-vo').value = split.kinematics.vo || '';
-                }
-            });
+            splits.forEach((split) => addRunSplit(split));
             recalcRunTotals();
         } else if (type === 'weightlifting') {
             document.getElementById('lift-duration').value = target.lifting?.duration || '';
@@ -1520,11 +1583,12 @@
                         if (metricsRow && metricsRow.classList.contains('split-kin-row')) {
                             metricsRow.querySelector('.set-peak').value = ex.sets[0].peakPower || '';
                             metricsRow.querySelector('.set-mpv').value = ex.sets[0].mpv || '';
-                            metricsRow.querySelector('.set-rfd').value = ex.sets[0].rfd || '';
+                            metricsRow.querySelector('.set-rom-cm').value = ex.sets[0].romCm || '';
+                            metricsRow.querySelector('.set-bar-speed').value = ex.sets[0].barSpeed || ex.sets[0].rfd || '';
                         }
                     }
                     for (let i = 1; i < ex.sets.length; i++) {
-                        addExSet(card.querySelector('button:last-child'));
+                        addExSet(card.querySelector('.add-lift-set-btn'));
                         const lastRows = card.querySelectorAll('tbody tr.set-data-row');
                         const row = lastRows[lastRows.length - 1];
                         const metricsRow = row?.nextElementSibling;
@@ -1535,7 +1599,8 @@
                         if (metricsRow && metricsRow.classList.contains('split-kin-row')) {
                             metricsRow.querySelector('.set-peak').value = ex.sets[i].peakPower || '';
                             metricsRow.querySelector('.set-mpv').value = ex.sets[i].mpv || '';
-                            metricsRow.querySelector('.set-rfd').value = ex.sets[i].rfd || '';
+                            metricsRow.querySelector('.set-rom-cm').value = ex.sets[i].romCm || '';
+                            metricsRow.querySelector('.set-bar-speed').value = ex.sets[i].barSpeed || ex.sets[i].rfd || '';
                         }
                     }
                 }
@@ -1615,14 +1680,16 @@
                         const metricsRow = r.nextElementSibling;
                         const peakPower = parseFloat(metricsRow?.querySelector('.set-peak')?.value);
                         const mpv = parseFloat(metricsRow?.querySelector('.set-mpv')?.value);
-                        const rfd = parseFloat(metricsRow?.querySelector('.set-rfd')?.value);
+                        const romCm = parseFloat(metricsRow?.querySelector('.set-rom-cm')?.value);
+                        const barSpeed = parseFloat(metricsRow?.querySelector('.set-bar-speed')?.value);
                         return {
                             reps: parseInt(r.querySelector('.set-reps').value) || 0,
                             load: parseFloat(r.querySelector('.set-load').value) || 0,
                             type: r.querySelector('.set-type').value,
                             peakPower: Number.isFinite(peakPower) ? peakPower : null,
                             mpv: Number.isFinite(mpv) ? mpv : null,
-                            rfd: Number.isFinite(rfd) ? rfd : null
+                            romCm: Number.isFinite(romCm) ? romCm : null,
+                            barSpeed: Number.isFinite(barSpeed) ? barSpeed : null
                         };
                     })
                 };
@@ -2214,6 +2281,8 @@
 
                         const actions = document.createElement('div');
                         actions.style.marginTop = '6px';
+                        actions.style.display = 'flex';
+                        actions.style.gap = '6px';
                         const editBtn = document.createElement('button');
                         editBtn.style.width = 'auto';
                         editBtn.style.minHeight = 'unset';
@@ -2221,7 +2290,16 @@
                         editBtn.style.fontSize = '0.75rem';
                         editBtn.textContent = 'Edit session';
                         editBtn.dataset.sessionEditId = sessionIdValue(s);
+                        const delBtn = document.createElement('button');
+                        delBtn.style.width = 'auto';
+                        delBtn.style.minHeight = 'unset';
+                        delBtn.style.padding = '4px 10px';
+                        delBtn.style.fontSize = '0.75rem';
+                        delBtn.style.color = 'var(--danger)';
+                        delBtn.textContent = 'Delete session';
+                        delBtn.dataset.sessionId = sessionIdValue(s);
                         actions.appendChild(editBtn);
+                        actions.appendChild(delBtn);
                         row.appendChild(actions);
                         
                         const det = document.createElement('div');
@@ -2311,8 +2389,9 @@
                                             let setStr = `Set ${sIdx+1}: ${set.load||0}kg x ${set.reps||0} (${set.type||'working'})`;
                                             const metrics = [];
                                             if (set.peakPower) metrics.push(`Peak: ${set.peakPower}W`);
-                                            if (set.mpv) metrics.push(`MPV: ${set.mpv}`);
-                                            if (set.rfd) metrics.push(`RFD: ${set.rfd}`);
+                                            if (set.mpv) metrics.push(`MPV: ${set.mpv}W`);
+                                            if (set.romCm) metrics.push(`ROM: ${set.romCm}cm`);
+                                            if (set.barSpeed || set.rfd) metrics.push(`Bar speed: ${set.barSpeed || set.rfd}m/s`);
                                             if (metrics.length) setStr += ` [${metrics.join(' | ')}]`;
                                             li.textContent = setStr;
                                             sList.appendChild(li);
@@ -2360,13 +2439,7 @@
         }
         container.appendChild(card);
         
-        // Scroll parent container
-        const calView = document.getElementById('view-calendar');
-        if (calView) {
-            setTimeout(() => {
-                calView.scrollTop = calView.scrollHeight;
-            }, 50);
-        }
+        setTimeout(() => container.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 0);
     }
     window.openDayModal = openDayModal;
 
@@ -3086,7 +3159,6 @@
                 <div class="card">${sectionTitle(`HRV Trend — Week ${weekNo}`)}${chartCanvasBlock('analytics-week-rmssd')}</div>
                 <div class="card" id="analytics-week-speed-card"></div>
                 <div class="card" id="analytics-week-volume-card"></div>
-                <div class="card">${sectionTitle('Readiness vs RPE (8 weeks)')}${chartCanvasBlock('analytics-ready-rpe')}</div>
             </div>
         `;
 
@@ -3097,7 +3169,6 @@
         destroyAnalyticsChart('weeklyRmssd');
         destroyAnalyticsChart('weeklySpeedTrend');
         destroyAnalyticsChart('weeklyVolumeExercise');
-        destroyAnalyticsChart('readyRpe');
 
         const sessionsByDay = dayKeys.map((key) => (appState.sessions || []).filter((s) => normalizeDate(s?.date) === key));
         const readinessByDay = dayKeys.map((key) => Number((appState.measurements || []).find((m) => normalizeDate(m?.date) === key)?.readiness) || 0);
@@ -3327,41 +3398,6 @@
             }
         }
 
-        const scatterPoints = (appState.sessions || []).filter((s) => {
-            const d = new Date(s?.date || 0);
-            return d >= addDays(baseWeek, -7 * 7) && d <= addDays(baseWeek, 6) && s?.readinessScore != null && s?.rpe != null;
-        }).map((s) => ({
-            x: Number(s.readinessScore) || 0,
-            y: Number(s.rpe) || 0,
-            date: normalizeDate(s?.date),
-            selected: dayKeys.includes(normalizeDate(s?.date))
-        }));
-        const readyCtx = document.getElementById('analytics-ready-rpe');
-        if (readyCtx) {
-            analyticsCharts.readyRpe = new Chart(readyCtx, {
-                type: 'scatter',
-                data: {
-                    datasets: [{
-                        data: scatterPoints,
-                        backgroundColor: scatterPoints.map((p) => (p.x < 75 && p.y >= 7) ? analyticsCss('--danger') : analyticsCss('--accent')),
-                        pointRadius: scatterPoints.map((p) => p.selected ? 6 : 3)
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false },
-                        analyticsRefLines: { lines: [{ axis: 'x', value: 75 }, { axis: 'y', value: 7 }] }
-                    },
-                    scales: {
-                        x: { min: 0, max: 100, title: { display: true, text: 'Readiness' } },
-                        y: { min: 1, max: 10, title: { display: true, text: 'RPE' } }
-                    }
-                },
-                plugins: [refLinePlugin(), quadrantLabelPlugin()]
-            });
-        }
     }
 
     function renderMonthlyView() {
