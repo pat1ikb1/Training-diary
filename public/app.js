@@ -1633,6 +1633,7 @@
             c.appendChild(emptyEl);
         }
     }
+    window.renderCalendar = renderCalendar;
 
     function openDayModal(date, om, sessions) {
         let container = document.getElementById('calendar-day-details');
@@ -1752,6 +1753,7 @@
             }, 50);
         }
     }
+    window.openDayModal = openDayModal;
 
     let logSparkChartInst = null;
     function renderLogSparkline() {
