@@ -1692,6 +1692,7 @@
                 row.style.fontSize = '0.85rem';
                 
                 let typeStr = (typeof s.type === 'string' && s.type.length > 0) ? s.type : 'Training';
+                const st = document.createElement('strong');
                 st.textContent = s.title || (typeStr.charAt(0).toUpperCase() + typeStr.slice(1) + ' Session');
                 
                 const span = document.createElement('div');
