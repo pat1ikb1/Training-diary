@@ -483,9 +483,9 @@
         if (calendarDetails) {
             calendarDetails.addEventListener('click', (e) => {
                 const editBtn = e.target.closest('button[data-session-edit-id]');
-                const delBtn = e.target.closest('button[data-session-id]');
+                const deleteBtn = e.target.closest('button[data-session-delete-id]');
                 if (editBtn?.dataset.sessionEditId) startSessionEdit(editBtn.dataset.sessionEditId, 'calendar');
-                if (delBtn?.dataset.sessionId) deleteSession(delBtn.dataset.sessionId);
+                if (deleteBtn?.dataset.sessionDeleteId) deleteSession(deleteBtn.dataset.sessionDeleteId);
             });
         }
 
@@ -1239,7 +1239,6 @@
         tbody.appendChild(tr);
         tbody.appendChild(kinTr);
         if (presetSplit) populateRunSplitRow(tr, kinTr, presetSplit);
-        return { tr, kinTr };
     }
 
     function removeSplitRow(btn) {
@@ -1276,8 +1275,9 @@
         const tr = btn.closest('tr');
         const kinTr = tr?.nextElementSibling;
         if (!tr) return;
+        const spikesValue = tr.querySelector('.split-spikes')?.value;
         const cloneData = {
-            spikes: tr.querySelector('.split-spikes')?.value === 'no' ? 'no' : 'yes',
+            spikes: spikesValue === 'yes' ? 'yes' : spikesValue === 'no' ? 'no' : getDefaultSpikesForCurrentSession(),
             distance: parseFloat(tr.querySelector('.split-dist')?.value) || 0,
             time: parseTime(tr.querySelector('.split-time')?.value),
             rest: parseRestSeconds(tr.querySelector('.split-rest')?.value) || 0,
@@ -1289,11 +1289,16 @@
                 vo: parseFloat(kinTr.querySelector('.kin-vo')?.value) || null
             } : null
         };
-        if (cloneData.kinematics && !Object.values(cloneData.kinematics).some((v) => Number.isFinite(v) && v > 0)) {
+        if (cloneData.kinematics && !Object.values(cloneData.kinematics).some((v) => Number.isFinite(v))) {
             cloneData.kinematics = null;
         }
         addRunSplit(cloneData);
         recalcRunTotals();
+    }
+
+    function getSetBarSpeedValue(set) {
+        // Keep compatibility with older saved sessions that stored bar speed under `rfd`.
+        return set?.barSpeed || set?.rfd || '';
     }
 
     function recalcRunTotals() {
@@ -1356,6 +1361,7 @@
     function addExSet(btn, presetSet = null) {
         let tbody = btn.previousElementSibling.querySelector('tbody');
         let tr = document.createElement('tr');
+        const columnCount = btn.closest('table')?.querySelectorAll('thead th').length || 6;
         tr.className = 'set-data-row';
         tr.innerHTML = `
             <td><input type="number" class="set-reps" placeholder="0"></td>
@@ -1367,7 +1373,7 @@
         `;
         const metricsTr = document.createElement('tr');
         metricsTr.className = 'split-kin-row';
-        metricsTr.innerHTML = `<td colspan="6"><div class="split-kin-body">
+        metricsTr.innerHTML = `<td colspan="${columnCount}"><div class="split-kin-body">
             <input type="number" step="any" class="set-peak" placeholder="Peak Watt (W)">
             <input type="number" step="any" class="set-mpv" placeholder="MPV (W)">
             <input type="number" step="any" class="set-rom-cm" placeholder="ROM (cm)">
@@ -1584,7 +1590,7 @@
                             metricsRow.querySelector('.set-peak').value = ex.sets[0].peakPower || '';
                             metricsRow.querySelector('.set-mpv').value = ex.sets[0].mpv || '';
                             metricsRow.querySelector('.set-rom-cm').value = ex.sets[0].romCm || '';
-                            metricsRow.querySelector('.set-bar-speed').value = ex.sets[0].barSpeed || ex.sets[0].rfd || '';
+                            metricsRow.querySelector('.set-bar-speed').value = getSetBarSpeedValue(ex.sets[0]);
                         }
                     }
                     for (let i = 1; i < ex.sets.length; i++) {
@@ -1600,7 +1606,7 @@
                             metricsRow.querySelector('.set-peak').value = ex.sets[i].peakPower || '';
                             metricsRow.querySelector('.set-mpv').value = ex.sets[i].mpv || '';
                             metricsRow.querySelector('.set-rom-cm').value = ex.sets[i].romCm || '';
-                            metricsRow.querySelector('.set-bar-speed').value = ex.sets[i].barSpeed || ex.sets[i].rfd || '';
+                            metricsRow.querySelector('.set-bar-speed').value = getSetBarSpeedValue(ex.sets[i]);
                         }
                     }
                 }
@@ -2297,7 +2303,7 @@
                         delBtn.style.fontSize = '0.75rem';
                         delBtn.style.color = 'var(--danger)';
                         delBtn.textContent = 'Delete session';
-                        delBtn.dataset.sessionId = sessionIdValue(s);
+                        delBtn.dataset.sessionDeleteId = sessionIdValue(s);
                         actions.appendChild(editBtn);
                         actions.appendChild(delBtn);
                         row.appendChild(actions);
@@ -2391,7 +2397,8 @@
                                             if (set.peakPower) metrics.push(`Peak: ${set.peakPower}W`);
                                             if (set.mpv) metrics.push(`MPV: ${set.mpv}W`);
                                             if (set.romCm) metrics.push(`ROM: ${set.romCm}cm`);
-                                            if (set.barSpeed || set.rfd) metrics.push(`Bar speed: ${set.barSpeed || set.rfd}m/s`);
+                                            const barSpeed = getSetBarSpeedValue(set);
+                                            if (barSpeed) metrics.push(`Bar speed: ${barSpeed}m/s`);
                                             if (metrics.length) setStr += ` [${metrics.join(' | ')}]`;
                                             li.textContent = setStr;
                                             sList.appendChild(li);
