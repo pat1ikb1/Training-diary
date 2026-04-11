@@ -1648,6 +1648,10 @@
             if(tv) tv.appendChild(container);
             else return;
         }
+        
+        const hint = document.getElementById('cal-hint');
+        if (hint) hint.style.display = 'none';
+
         container.innerHTML = '';
         container.style.display = 'flex';
 
@@ -1740,8 +1744,13 @@
         }
         container.appendChild(card);
         
-        // Scroll to details on narrow screens smoothly
-        container.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        // Scroll parent container
+        const calView = document.getElementById('view-calendar');
+        if (calView) {
+            setTimeout(() => {
+                calView.scrollTop = calView.scrollHeight;
+            }, 50);
+        }
     }
 
     let logSparkChartInst = null;
