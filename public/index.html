@@ -199,8 +199,6 @@
                 </div>
                 <label for="log-title" style="font-size: 0.85rem; color: var(--text-muted);">Session title</label>
                 <input type="text" id="log-title" placeholder="Session Title...">
-                <label for="log-notes" style="font-size: 0.85rem; color: var(--text-muted);">Notes</label>
-                <textarea id="log-notes" rows="2" placeholder="Session notes..."></textarea>
                 <div id="log-readiness-badge" class="badge" style="display: none; align-self: flex-start; margin-top: 5px;"></div>
             </div>
 
@@ -226,7 +224,7 @@
                 </div>
                 <div class="card" style="padding:0; overflow-x: auto;">
                     <table class="data-table" id="run-splits-table">
-                        <thead><tr><th>Spikes</th><th>Dist (m)</th><th>Time</th><th>Rest</th><th>km/h</th><th>m/s</th><th></th></tr></thead>
+                        <thead><tr><th>Spikes</th><th>Dist (m)</th><th>Time (s)</th><th>Rest</th><th>km/h</th><th>m/s</th><th></th></tr></thead>
                         <tbody></tbody>
                     </table>
                     <div style="padding: 10px;">
@@ -375,7 +373,7 @@
                 <button id="btn-logout" style="color: var(--warning); border-color: var(--warning);" onclick="requestLogOut()">Log Out</button>
             </div>
 
-            <div class="card" style="margin-top: auto;">
+            <div class="card" style="margin-top: 20px;">
                 <button onclick="exportCSV()">Export CSV</button>
                 <button style="color: var(--danger); border-color: var(--danger); margin-top: 10px;" onclick="confirmClear()">Clear All Data</button>
             </div>

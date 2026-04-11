@@ -337,6 +337,7 @@
         .kin-toggle-btn { background: none; border: none; color: var(--text-muted); font-size: 0.7rem; padding: 2px 6px; min-height: unset; width: auto; cursor: pointer; white-space: nowrap; }
         .kin-toggle-btn:hover { color: var(--accent); }
         #log-form-base { overflow: visible; }
+        #view-settings .card { flex-shrink: 0; }
         .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; white-space: nowrap; }
 
         @keyframes pb-flash-anim { 0% { background-color: var(--card); } 20% { background-color: rgba(35, 134, 54, 0.4); } 100% { background-color: var(--card); } }

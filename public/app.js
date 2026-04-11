@@ -1186,17 +1186,18 @@
 
     function addRunSplit() {
         let tbody = qs('#run-splits-table tbody');
+        const spikesDefault = getDefaultSpikesForCurrentSession();
         let tr = document.createElement('tr');
         tr.className = 'split-data-row';
         tr.innerHTML = `
             <td>
                 <select class="split-spikes">
-                    <option value="yes" selected>Yes</option>
-                    <option value="no">No</option>
+                    <option value="yes"${spikesDefault === 'yes' ? ' selected' : ''}>Yes</option>
+                    <option value="no"${spikesDefault === 'no' ? ' selected' : ''}>No</option>
                 </select>
             </td>
             <td><input type="number" step="any" placeholder="1000" class="split-dist"></td>
-            <td><input type="text" placeholder="mm:ss" class="split-time"></td>
+            <td><input type="number" step="0.01" placeholder="7.56" class="split-time"></td>
             <td><input type="text" placeholder="min or mm:ss" class="split-rest" style="max-width:90px;"></td>
             <td class="split-kmh">--</td><td class="split-ms">--</td>
             <td style="display:flex; gap:2px; align-items:center;">
@@ -1285,7 +1286,7 @@
             <button style="position:absolute; top:8px; right:8px; padding:4px; width:auto; min-height:unset;" onclick="this.closest('.card').remove()">✕</button>
             <input class="ex-name" type="text" list="exercise-list" placeholder="Exercise Name..." style="margin-bottom:10px; width: 85%;">
             <table class="data-table">
-                <thead><tr><th>Reps</th><th>Load</th><th>Type</th><th>Peak W</th><th></th></tr></thead>
+                <thead><tr><th>Reps</th><th>Load</th><th>Type</th><th></th><th></th></tr></thead>
                 <tbody></tbody>
             </table>
             <button style="margin-top:8px; min-height:30px; font-size:0.8rem; padding: 4px;" onclick="addExSet(this)">+ Add Set</button>
@@ -1302,10 +1303,32 @@
             <td><input type="number" class="set-reps" placeholder="0"></td>
             <td><input type="number" step="any" class="set-load" placeholder="kg"></td>
             <td><select class="set-type"><option value="working">Work</option><option value="warmup">Warm</option></select></td>
-            <td><input type="number" class="set-peak" placeholder="W"></td>
-            <td><button style="padding:4px; min-height:unset;" onclick="this.closest('tr').remove()">✕</button></td>
+            <td><button class="kin-toggle-btn" onclick="toggleLiftSetMetrics(this)">Set Metrics ▾</button></td>
+            <td><button style="padding:4px; min-height:unset;" onclick="removeLiftSetRow(this)">✕</button></td>
         `;
+        const metricsTr = document.createElement('tr');
+        metricsTr.className = 'split-kin-row';
+        metricsTr.innerHTML = `<td colspan="5"><div class="split-kin-body">
+            <input type="number" step="any" class="set-peak" placeholder="Peak Watt (W)">
+            <input type="number" step="any" class="set-mpv" placeholder="MPV (m/s)">
+            <input type="number" step="any" class="set-rfd" placeholder="RFD">
+        </div></td>`;
         tbody.appendChild(tr);
+        tbody.appendChild(metricsTr);
+    }
+
+    function toggleLiftSetMetrics(btn) {
+        const kinBody = btn.closest('tr')?.nextElementSibling?.querySelector('.split-kin-body');
+        if (!kinBody) return;
+        const open = kinBody.classList.toggle('open');
+        btn.innerText = open ? 'Set Metrics ▴' : 'Set Metrics ▾';
+    }
+
+    function removeLiftSetRow(btn) {
+        const dataRow = btn.closest('tr');
+        const metricsRow = dataRow?.nextElementSibling;
+        if (metricsRow && metricsRow.classList.contains('split-kin-row')) metricsRow.remove();
+        if (dataRow) dataRow.remove();
     }
 
     function parseTime(str) {
@@ -1331,6 +1354,17 @@
         if (spikes === 'yes') return 'yes';
         // Backward compatibility for older saved splits that used `label` before the spikes selector.
         return String(split?.label || '').toLowerCase() === 'no' ? 'no' : 'yes';
+    }
+
+    function getDefaultSpikesForCurrentSession() {
+        const title = (document.getElementById('log-title')?.value || '').trim().toLowerCase();
+        return title.includes('aerob') ? 'no' : 'yes';
+    }
+
+    function formatSplitInputSeconds(value) {
+        const n = Number(value);
+        if (!Number.isFinite(n) || n <= 0) return '';
+        return n.toFixed(2);
     }
 
     function formatRestInput(restSecs) {
@@ -1416,7 +1450,6 @@
         document.getElementById('log-date').value = target.date || '';
         document.getElementById('log-time').value = target.time || '12:00';
         document.getElementById('log-title').value = target.title || '';
-        document.getElementById('log-notes').value = target.notes || '';
 
         const type = target.type || 'other';
         const typeRadio = document.querySelector(`input[name="log-type"][value="${type}"]`);
@@ -1435,7 +1468,7 @@
                 if (!tr) return;
                 tr.querySelector('.split-spikes').value = getSplitSpikesValue(split);
                 tr.querySelector('.split-dist').value = split.distance || '';
-                tr.querySelector('.split-time').value = split.time ? formatTimeLength(split.time) : '';
+                tr.querySelector('.split-time').value = formatSplitInputSeconds(split.time);
                 tr.querySelector('.split-rest').value = formatRestInput(split.rest);
                 if (kinTr && kinTr.classList.contains('split-kin-row') && split.kinematics) {
                     kinTr.querySelector('.kin-gct').value = split.kinematics.gct || '';
@@ -1460,19 +1493,30 @@
                 const rows = card.querySelectorAll('tbody tr');
                 if (Array.isArray(ex.sets) && ex.sets.length > 0) {
                     if (rows[0]) {
+                        const metricsRow = rows[0].nextElementSibling;
                         rows[0].querySelector('.set-reps').value = ex.sets[0].reps || '';
                         rows[0].querySelector('.set-load').value = ex.sets[0].load || '';
                         rows[0].querySelector('.set-type').value = ex.sets[0].type || 'working';
-                        rows[0].querySelector('.set-peak').value = ex.sets[0].peakPower || '';
+                        if (metricsRow && metricsRow.classList.contains('split-kin-row')) {
+                            metricsRow.querySelector('.set-peak').value = ex.sets[0].peakPower || '';
+                            metricsRow.querySelector('.set-mpv').value = ex.sets[0].mpv || '';
+                            metricsRow.querySelector('.set-rfd').value = ex.sets[0].rfd || '';
+                        }
                     }
                     for (let i = 1; i < ex.sets.length; i++) {
                         addExSet(card.querySelector('button:last-child'));
                         const lastRows = card.querySelectorAll('tbody tr');
-                        const row = lastRows[lastRows.length - 1];
+                        const row = lastRows[lastRows.length - 2];
+                        const metricsRow = row?.nextElementSibling;
+                        if (!row) continue;
                         row.querySelector('.set-reps').value = ex.sets[i].reps || '';
                         row.querySelector('.set-load').value = ex.sets[i].load || '';
                         row.querySelector('.set-type').value = ex.sets[i].type || 'working';
-                        row.querySelector('.set-peak').value = ex.sets[i].peakPower || '';
+                        if (metricsRow && metricsRow.classList.contains('split-kin-row')) {
+                            metricsRow.querySelector('.set-peak').value = ex.sets[i].peakPower || '';
+                            metricsRow.querySelector('.set-mpv').value = ex.sets[i].mpv || '';
+                            metricsRow.querySelector('.set-rfd').value = ex.sets[i].rfd || '';
+                        }
                     }
                 }
             });
@@ -1505,7 +1549,6 @@
             time: document.getElementById('log-time').value,
             title: title,
             type: type,
-            notes: document.getElementById('log-notes').value,
             readinessScore: exactMatch ? exactMatch.readiness : null,
             hasPB: false,
             pbDetails: [],
@@ -1545,15 +1588,23 @@
             };
         } else if(type === 'weightlifting') {
             let exs = qsa('.lift-ex-card').map(card => {
-                let sRows = card.querySelectorAll('tbody tr');
+                let sRows = card.querySelectorAll('tbody tr:not(.split-kin-row)');
                 return {
                     name: card.querySelector('.ex-name').value.trim() || 'Unknown',
-                    sets: [...sRows].map(r => ({
-                        reps: parseInt(r.querySelector('.set-reps').value) || 0,
-                        load: parseFloat(r.querySelector('.set-load').value) || 0,
-                        type: r.querySelector('.set-type').value,
-                        peakPower: parseFloat(r.querySelector('.set-peak').value) || null
-                    }))
+                    sets: [...sRows].map(r => {
+                        const metricsRow = r.nextElementSibling;
+                        const peakPower = parseFloat(metricsRow?.querySelector('.set-peak')?.value);
+                        const mpv = parseFloat(metricsRow?.querySelector('.set-mpv')?.value);
+                        const rfd = parseFloat(metricsRow?.querySelector('.set-rfd')?.value);
+                        return {
+                            reps: parseInt(r.querySelector('.set-reps').value) || 0,
+                            load: parseFloat(r.querySelector('.set-load').value) || 0,
+                            type: r.querySelector('.set-type').value,
+                            peakPower: Number.isFinite(peakPower) ? peakPower : null,
+                            mpv: Number.isFinite(mpv) ? mpv : null,
+                            rfd: Number.isFinite(rfd) ? rfd : null
+                        };
+                    })
                 };
             }).filter(e => e.name !== 'Unknown');
             
@@ -1601,7 +1652,6 @@
 
     function resetLogForm() {
         document.getElementById('log-title').value = '';
-        document.getElementById('log-notes').value = '';
         document.getElementById('run-total-dist').innerText = '0 m';
         document.getElementById('run-total-time').innerText = '00:00';
         document.getElementById('run-total-dist').dataset.metres = 0;
@@ -1822,6 +1872,30 @@
         showToast('Gym PR updated.', 'success');
     }
 
+    async function deleteTrackPB(distanceKey) {
+        const current = appState.personalBests.track?.[distanceKey];
+        if (!current) return;
+        const confirmed = await showConfirm(`Remove PR for ${distanceKey}?`, { title: 'Remove track PR', confirmText: 'Remove' });
+        if (!confirmed) return;
+        appState.personalBests.track[distanceKey] = null;
+        localStorage.setItem('omegahrv_pbs', JSON.stringify(appState.personalBests));
+        renderPBsTrack();
+        pushProfile();
+        showToast('Track PR removed.', 'success');
+    }
+
+    async function deleteGymPB(exerciseKey) {
+        const current = appState.personalBests.gym?.[exerciseKey];
+        if (!current) return;
+        const confirmed = await showConfirm(`Remove PR for ${exerciseKey}?`, { title: 'Remove gym PR', confirmText: 'Remove' });
+        if (!confirmed) return;
+        delete appState.personalBests.gym[exerciseKey];
+        localStorage.setItem('omegahrv_pbs', JSON.stringify(appState.personalBests));
+        renderPBsGym();
+        pushProfile();
+        showToast('Gym PR removed.', 'success');
+    }
+
     function renderPBsTrack() {
         let t = document.getElementById('pr-track-tbody');
         t.innerHTML = '';
@@ -1853,7 +1927,18 @@
                 editBtn.style.fontSize = '0.75rem';
                 editBtn.textContent = 'Edit';
                 editBtn.addEventListener('click', () => editTrackPB(k));
+                const removeBtn = document.createElement('button');
+                removeBtn.style.width = 'auto';
+                removeBtn.style.minHeight = 'unset';
+                removeBtn.style.padding = '4px 8px';
+                removeBtn.style.fontSize = '0.75rem';
+                removeBtn.style.marginLeft = '6px';
+                removeBtn.style.borderColor = 'var(--danger)';
+                removeBtn.style.color = 'var(--danger)';
+                removeBtn.textContent = 'Remove';
+                removeBtn.addEventListener('click', () => deleteTrackPB(k));
                 td4.appendChild(editBtn);
+                td4.appendChild(removeBtn);
                 row.append(td1, td2, td3, td4);
                 t.appendChild(row);
             }
@@ -1888,7 +1973,18 @@
             editBtn.style.fontSize = '0.75rem';
             editBtn.textContent = 'Edit';
             editBtn.addEventListener('click', () => editGymPB(k));
+            const removeBtn = document.createElement('button');
+            removeBtn.style.width = 'auto';
+            removeBtn.style.minHeight = 'unset';
+            removeBtn.style.padding = '4px 8px';
+            removeBtn.style.fontSize = '0.75rem';
+            removeBtn.style.marginLeft = '6px';
+            removeBtn.style.borderColor = 'var(--danger)';
+            removeBtn.style.color = 'var(--danger)';
+            removeBtn.textContent = 'Remove';
+            removeBtn.addEventListener('click', () => deleteGymPB(k));
             td5.appendChild(editBtn);
+            td5.appendChild(removeBtn);
             row.append(td1, td2, td3, td4, td5);
             t.appendChild(row);
         });
@@ -2193,7 +2289,11 @@
                                             let li = document.createElement('li');
                                             li.style.listStyleType = 'circle';
                                             let setStr = `Set ${sIdx+1}: ${set.load||0}kg x ${set.reps||0} (${set.type||'working'})`;
-                                            if (set.peakPower) setStr += ` [Peak: ${set.peakPower}W]`;
+                                            const metrics = [];
+                                            if (set.peakPower) metrics.push(`Peak: ${set.peakPower}W`);
+                                            if (set.mpv) metrics.push(`MPV: ${set.mpv}`);
+                                            if (set.rfd) metrics.push(`RFD: ${set.rfd}`);
+                                            if (metrics.length) setStr += ` [${metrics.join(' | ')}]`;
                                             li.textContent = setStr;
                                             sList.appendChild(li);
                                         });
@@ -2228,18 +2328,6 @@
                                 pbWrap.appendChild(pill);
                             });
                             det.appendChild(pbWrap);
-                        }
-                        
-                        if (s.notes) {
-                            let notesEl = document.createElement('div');
-                            notesEl.style.fontStyle = 'italic';
-                            notesEl.style.marginTop = '6px';
-                            notesEl.style.padding = '6px';
-                            notesEl.style.background = 'var(--bg)';
-                            notesEl.style.borderRadius = '4px';
-                            notesEl.style.color = 'var(--text-muted)';
-                            notesEl.textContent = `"${s.notes}"`;
-                            det.appendChild(notesEl);
                         }
                         
                         row.appendChild(det);
