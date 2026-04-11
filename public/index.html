@@ -199,13 +199,6 @@
                 </div>
                 <label for="log-title" style="font-size: 0.85rem; color: var(--text-muted);">Session title</label>
                 <input type="text" id="log-title" placeholder="Session Title...">
-                <div class="card-row">
-                    <label for="log-rpe" style="font-size: 0.85rem; color: var(--text-muted);">Session RPE (1-10)</label>
-                    <output id="log-rpe-val" style="width: 20px; text-align: right;">5</output>
-                </div>
-                <input type="range" id="log-rpe" min="1" max="10" value="5" aria-describedby="log-rpe-guide" oninput="document.getElementById('log-rpe-val').value = this.value">
-                <div class="rpe-scale" aria-hidden="true"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span></div>
-                <p id="log-rpe-guide" style="font-size: 0.75rem; color: var(--text-muted);">Borg CR10 guide: 1–2 very easy, 5 moderate, 8 hard, 10 maximal.</p>
                 <label for="log-notes" style="font-size: 0.85rem; color: var(--text-muted);">Notes</label>
                 <textarea id="log-notes" rows="2" placeholder="Session notes..."></textarea>
                 <div id="log-readiness-badge" class="badge" style="display: none; align-self: flex-start; margin-top: 5px;"></div>
@@ -233,7 +226,7 @@
                 </div>
                 <div class="card" style="padding:0; overflow-x: auto;">
                     <table class="data-table" id="run-splits-table">
-                        <thead><tr><th>Split</th><th>Dist (m)</th><th>Time</th><th>Rest</th><th>km/h</th><th>m/s</th><th></th></tr></thead>
+                        <thead><tr><th>Spikes</th><th>Dist (m)</th><th>Time</th><th>Rest</th><th>km/h</th><th>m/s</th><th></th></tr></thead>
                         <tbody></tbody>
                     </table>
                     <div style="padding: 10px;">
@@ -246,14 +239,6 @@
             <div id="log-form-weightlifting" class="log-form-section" style="display: none;">
                 <div class="card">
                     <input type="text" id="lift-duration" placeholder="Session Duration (mm:ss)">
-                    <div id="lift-modalities" class="chip-group" style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px;">
-                        <div class="chip" onclick="this.classList.toggle('active')">Strength</div>
-                        <div class="chip" onclick="this.classList.toggle('active')">Hypertrophy</div>
-                        <div class="chip" onclick="this.classList.toggle('active')">Power</div>
-                        <div class="chip" onclick="this.classList.toggle('active')">Speed-Strength</div>
-                        <div class="chip" onclick="this.classList.toggle('active')">Plyometrics</div>
-                        <div class="chip" onclick="this.classList.toggle('active')">Conditioning</div>
-                    </div>
                 </div>
 
                 <div id="lift-exercises-container" style="display: flex; flex-direction: column; gap: 16px; margin-top: 15px;"></div>
@@ -292,7 +277,7 @@
             <div id="pr-view-track" class="pr-section active">
                 <div class="card" style="padding: 0; overflow-x: auto;">
                     <table class="data-table">
-                        <thead><tr><th>Distance</th><th>Best Time</th><th>Date</th></tr></thead>
+                        <thead><tr><th>Distance</th><th>Best Time</th><th>Date</th><th></th></tr></thead>
                         <tbody id="pr-track-tbody"></tbody>
                     </table>
                     <div style="padding: 10px;">
@@ -304,7 +289,7 @@
             <div id="pr-view-gym" class="pr-section" style="display: none;">
                 <div class="card" style="padding: 0; overflow-x: auto;">
                     <table class="data-table">
-                        <thead><tr><th>Exercise</th><th>Best e1RM</th><th>Best Load</th><th>Date</th></tr></thead>
+                        <thead><tr><th>Exercise</th><th>Best e1RM</th><th>Best Load</th><th>Date</th><th></th></tr></thead>
                         <tbody id="pr-gym-tbody"></tbody>
                     </table>
                 </div>

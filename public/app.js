@@ -289,7 +289,6 @@
                 time: s.time,
                 title: s.title,
                 type: s.type,
-                rpe: s.rpe,
                 notes: s.notes,
                 readinessScore: s.readiness_score,
                 hasPB: s.has_pb,
@@ -352,7 +351,6 @@
                 time: s.time,
                 title: s.title,
                 type: s.type,
-                rpe: s.rpe,
                 notes: s.notes,
                 readiness_score: s.readinessScore,
                 has_pb: s.hasPB,
@@ -409,7 +407,6 @@
                     time: s.time,
                     title: s.title,
                     type: s.type,
-                    rpe: s.rpe,
                     notes: s.notes,
                     readiness_score: s.readinessScore,
                     has_pb: s.hasPB,
@@ -1189,11 +1186,15 @@
 
     function addRunSplit() {
         let tbody = qs('#run-splits-table tbody');
-        let splitNum = Math.floor(tbody.children.length / 2) + 1;
         let tr = document.createElement('tr');
         tr.className = 'split-data-row';
         tr.innerHTML = `
-            <td><input type="text" placeholder="Split ${splitNum}" class="split-lbl"></td>
+            <td>
+                <select class="split-spikes">
+                    <option value="yes" selected>Yes</option>
+                    <option value="no">No</option>
+                </select>
+            </td>
             <td><input type="number" step="any" placeholder="1000" class="split-dist"></td>
             <td><input type="text" placeholder="mm:ss" class="split-time"></td>
             <td><input type="text" placeholder="min or mm:ss" class="split-rest" style="max-width:90px;"></td>
@@ -1407,8 +1408,6 @@
         document.getElementById('log-date').value = target.date || '';
         document.getElementById('log-time').value = target.time || '12:00';
         document.getElementById('log-title').value = target.title || '';
-        document.getElementById('log-rpe').value = String(target.rpe || 5);
-        document.getElementById('log-rpe-val').value = String(target.rpe || 5);
         document.getElementById('log-notes').value = target.notes || '';
 
         const type = target.type || 'other';
@@ -1426,7 +1425,10 @@
                 const tr = rows[rows.length - 1];
                 const kinTr = tr?.nextElementSibling;
                 if (!tr) return;
-                tr.querySelector('.split-lbl').value = split.label || '';
+                const spikesVal = String(split.spikes ?? '').toLowerCase() === 'no'
+                    ? 'no'
+                    : (String(split.label || '').toLowerCase() === 'no' ? 'no' : 'yes');
+                tr.querySelector('.split-spikes').value = spikesVal;
                 tr.querySelector('.split-dist').value = split.distance || '';
                 tr.querySelector('.split-time').value = split.time ? formatTimeLength(split.time) : '';
                 tr.querySelector('.split-rest').value = formatRestInput(split.rest);
@@ -1441,8 +1443,6 @@
             recalcRunTotals();
         } else if (type === 'weightlifting') {
             document.getElementById('lift-duration').value = target.lifting?.duration || '';
-            const mods = new Set(Array.isArray(target.lifting?.modalities) ? target.lifting.modalities : []);
-            qsa('#lift-modalities .chip').forEach((chip) => chip.classList.toggle('active', mods.has(chip.innerText)));
             const container = document.getElementById('lift-exercises-container');
             container.innerHTML = '';
             const exercises = Array.isArray(target.lifting?.exercises) ? target.lifting.exercises : [];
@@ -1500,7 +1500,6 @@
             time: document.getElementById('log-time').value,
             title: title,
             type: type,
-            rpe: parseInt(document.getElementById('log-rpe').value),
             notes: document.getElementById('log-notes').value,
             readinessScore: exactMatch ? exactMatch.readiness : null,
             hasPB: false,
@@ -1523,7 +1522,7 @@
                     if(gct || ft || sl || sf || vo) kin = { gct, ft, sl, sf, vo };
                 }
                 return {
-                    label: tr.querySelector('.split-lbl').value,
+                    spikes: tr.querySelector('.split-spikes').value === 'no' ? 'no' : 'yes',
                     distance: parseFloat(tr.querySelector('.split-dist').value) || 0,
                     time: parseTime(tr.querySelector('.split-time').value),
                     rest: parseRestSeconds(tr.querySelector('.split-rest').value) || 0,
@@ -1540,7 +1539,6 @@
                 splits: splits
             };
         } else if(type === 'weightlifting') {
-            let mods = qsa('#lift-modalities .chip.active').map(c => c.innerText);
             let exs = qsa('.lift-ex-card').map(card => {
                 let sRows = card.querySelectorAll('tbody tr');
                 return {
@@ -1556,7 +1554,6 @@
             
             sess.lifting = {
                 duration: document.getElementById('lift-duration').value,
-                modalities: mods,
                 exercises: exs
             };
         } else {
@@ -1600,8 +1597,6 @@
     function resetLogForm() {
         document.getElementById('log-title').value = '';
         document.getElementById('log-notes').value = '';
-        document.getElementById('log-rpe').value = '5';
-        document.getElementById('log-rpe-val').value = '5';
         document.getElementById('run-total-dist').innerText = '0 m';
         document.getElementById('run-total-time').innerText = '00:00';
         document.getElementById('run-total-dist').dataset.metres = 0;
@@ -1609,7 +1604,6 @@
         document.getElementById('run-total-time').dataset.restSecs = 0;
         document.querySelector('#run-splits-table tbody').innerHTML = '';
         document.getElementById('lift-duration').value = '';
-        qsa('#lift-modalities .chip').forEach(chip => chip.classList.remove('active'));
         document.getElementById('lift-exercises-container').innerHTML = '';
         document.getElementById('other-activity').value = '';
         document.getElementById('other-duration').value = '';
@@ -1710,9 +1704,9 @@
                 readiness.style.fontSize = '0.7rem';
                 readiness.textContent = `CNS: ${s.readinessScore}`;
                 meta.appendChild(readiness);
-                meta.appendChild(document.createTextNode(' '));
+                meta.appendChild(document.createTextNode(' • '));
             }
-            meta.appendChild(document.createTextNode(`RPE: ${s.rpe}/10`));
+            meta.appendChild(document.createTextNode(`Type: ${s.type || 'training'}`));
 
             const delBtn = document.createElement('button');
             delBtn.style.border = 'none';
@@ -1781,6 +1775,48 @@
         }
     }
 
+    function editTrackPB(distanceKey) {
+        const current = appState.personalBests.track?.[distanceKey];
+        if (!current) return;
+        const nextTime = parseFloat(prompt(`Edit best time for ${distanceKey} (seconds)`, String(current.time ?? '')));
+        if (!Number.isFinite(nextTime) || nextTime <= 0) return;
+        const nextDate = (prompt(`Edit date for ${distanceKey} (YYYY-MM-DD)`, current.date || '') || '').trim();
+        const parsedDist = parseFloat(distanceKey);
+        appState.personalBests.track[distanceKey] = {
+            ...current,
+            time: nextTime,
+            date: nextDate || current.date || '',
+            speed: Number.isFinite(parsedDist) && parsedDist > 0 ? parsedDist / nextTime : (current.speed || null)
+        };
+        localStorage.setItem('omegahrv_pbs', JSON.stringify(appState.personalBests));
+        renderPBsTrack();
+        pushProfile();
+        showToast('Track PR updated.', 'success');
+    }
+
+    function editGymPB(exerciseKey) {
+        const current = appState.personalBests.gym?.[exerciseKey];
+        if (!current) return;
+        const e1rm = parseFloat(prompt(`Edit best e1RM for ${exerciseKey} (kg)`, String(current.e1rm ?? '')));
+        if (!Number.isFinite(e1rm) || e1rm <= 0) return;
+        const load = parseFloat(prompt(`Edit best load for ${exerciseKey} (kg)`, String(current.load ?? '')));
+        if (!Number.isFinite(load) || load <= 0) return;
+        const reps = parseInt(prompt(`Edit reps for ${exerciseKey}`, String(current.reps ?? '')), 10);
+        if (!Number.isFinite(reps) || reps <= 0) return;
+        const nextDate = (prompt(`Edit date for ${exerciseKey} (YYYY-MM-DD)`, current.date || '') || '').trim();
+        appState.personalBests.gym[exerciseKey] = {
+            ...current,
+            e1rm,
+            load,
+            reps,
+            date: nextDate || current.date || ''
+        };
+        localStorage.setItem('omegahrv_pbs', JSON.stringify(appState.personalBests));
+        renderPBsGym();
+        pushProfile();
+        showToast('Gym PR updated.', 'success');
+    }
+
     function renderPBsTrack() {
         let t = document.getElementById('pr-track-tbody');
         t.innerHTML = '';
@@ -1804,7 +1840,16 @@
                 td2.textContent = st;
                 const td3 = document.createElement('td');
                 td3.textContent = pb.date;
-                row.append(td1, td2, td3);
+                const td4 = document.createElement('td');
+                const editBtn = document.createElement('button');
+                editBtn.style.width = 'auto';
+                editBtn.style.minHeight = 'unset';
+                editBtn.style.padding = '4px 8px';
+                editBtn.style.fontSize = '0.75rem';
+                editBtn.textContent = 'Edit';
+                editBtn.addEventListener('click', () => editTrackPB(k));
+                td4.appendChild(editBtn);
+                row.append(td1, td2, td3, td4);
                 t.appendChild(row);
             }
         });
@@ -1830,7 +1875,16 @@
             const td4 = document.createElement('td');
             td4.style.fontSize = '0.75rem';
             td4.textContent = pb.date;
-            row.append(td1, td2, td3, td4);
+            const td5 = document.createElement('td');
+            const editBtn = document.createElement('button');
+            editBtn.style.width = 'auto';
+            editBtn.style.minHeight = 'unset';
+            editBtn.style.padding = '4px 8px';
+            editBtn.style.fontSize = '0.75rem';
+            editBtn.textContent = 'Edit';
+            editBtn.addEventListener('click', () => editGymPB(k));
+            td5.appendChild(editBtn);
+            row.append(td1, td2, td3, td4, td5);
             t.appendChild(row);
         });
     }
@@ -2033,7 +2087,7 @@
                         
                         const span = document.createElement('div');
                         span.style.color = 'var(--text-muted)';
-                        span.textContent = `RPE ${s.rpe || '--'}/10 | Date: ${s.date || 'Unknown'} ${s.time || ''}`.trim();
+                        span.textContent = `Date: ${s.date || 'Unknown'} ${s.time || ''}`.trim();
                         row.appendChild(st);
                         row.appendChild(span);
 
@@ -2081,7 +2135,10 @@
                                     sRow.style.marginTop = '4px';
                                     
                                     let summary = document.createElement('div');
-                                    summary.innerHTML = `<em>${split.label || `Split ${idx+1}`}</em>: ${split.distance||0}m in ${split.time||0}s`;
+                                    const spikesLabel = String(split.spikes ?? '').toLowerCase() === 'no'
+                                        ? 'No'
+                                        : (String(split.label || '').toLowerCase() === 'no' ? 'No' : 'Yes');
+                                    summary.innerHTML = `<em>Spikes: ${spikesLabel}</em> — ${split.distance||0}m in ${split.time||0}s`;
                                     if (split.rest) summary.innerHTML += ` (Rest: ${split.rest}s)`;
                                     sRow.appendChild(summary);
                                     
@@ -2108,10 +2165,6 @@
                         } else if (s.type === 'weightlifting' && s.lifting) {
                             let liftBlock = document.createElement('div');
                             renderIfPresent(liftBlock, 'Duration', s.lifting.duration);
-                            
-                            if (Array.isArray(s.lifting.modalities) && s.lifting.modalities.length > 0) {
-                                renderIfPresent(liftBlock, 'Modalities', s.lifting.modalities.join(', '));
-                            }
                             
                             if (Array.isArray(s.lifting.exercises) && s.lifting.exercises.length > 0) {
                                 let exTitle = document.createElement('div');
