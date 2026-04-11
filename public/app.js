@@ -1581,7 +1581,9 @@
         let daysInMonth = new Date(year, month + 1, 0).getDate();
         
         for(let i=0; i<monShift; i++) {
-            c.innerHTML += `<div class="cal-day empty"></div>`;
+            let emptyEl = document.createElement('div');
+            emptyEl.className = 'cal-day empty';
+            c.appendChild(emptyEl);
         }
         
         let todayStr = new Date().toISOString().split('T')[0];
@@ -1619,7 +1621,11 @@
         }
         
         let rem = 42 - (monShift + daysInMonth);
-        for(let i=0; i<rem; i++) c.innerHTML += `<div class="cal-day empty"></div>`;
+        for(let i=0; i<rem; i++) {
+            let emptyEl = document.createElement('div');
+            emptyEl.className = 'cal-day empty';
+            c.appendChild(emptyEl);
+        }
     }
 
     function openDayModal(date, om, sessions) {
