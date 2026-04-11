@@ -2098,10 +2098,12 @@
         currentCalYear = year; currentCalMonth = month;
         let c = document.getElementById('calendar-days');
         c.innerHTML = '';
-        let detCT = document.getElementById('calendar-day-details');
-        if(detCT) {
-            detCT.innerHTML = '';
-            detCT.style.display = 'none';
+        const hint = document.getElementById('cal-hint');
+        if (hint) hint.style.display = '';
+        const detailPanel = document.getElementById('calendar-day-details');
+        if (detailPanel) {
+            detailPanel.classList.remove('visible');
+            detailPanel.innerHTML = '';
         }
         let monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
         document.getElementById('calendar-header').innerText = `${monthNames[month]} ${year}`;
@@ -2196,11 +2198,6 @@
         if (!container) {
             container = document.createElement('div');
             container.id = 'calendar-day-details';
-            container.style.display = 'flex';
-            container.style.flexDirection = 'column';
-            container.style.gap = '15px';
-            container.style.marginTop = '15px';
-            container.style.paddingBottom = '20px';
             const tv = document.getElementById('view-calendar');
             if(tv) tv.appendChild(container);
             else return;
@@ -2210,7 +2207,7 @@
         if (hint) hint.style.display = 'none';
 
         container.innerHTML = '';
-        container.style.display = 'flex';
+        container.classList.add('visible');
 
         const card = document.createElement('div');
         card.className = 'card';
@@ -2446,7 +2443,12 @@
         }
         container.appendChild(card);
         
-        setTimeout(() => container.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 0);
+        setTimeout(() => {
+            const calView = document.getElementById('view-calendar');
+            if (calView) {
+                calView.scrollTo({ top: calView.scrollHeight, behavior: 'smooth' });
+            }
+        }, 80);
     }
     window.openDayModal = openDayModal;
 
