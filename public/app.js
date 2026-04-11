@@ -1329,6 +1329,7 @@
         const spikes = String(split?.spikes ?? '').toLowerCase();
         if (spikes === 'no') return 'no';
         if (spikes === 'yes') return 'yes';
+        // Backward compatibility for older saved splits that used `label` before the spikes selector.
         return String(split?.label || '').toLowerCase() === 'no' ? 'no' : 'yes';
     }
 
@@ -1709,7 +1710,8 @@
                 readiness.textContent = `CNS: ${s.readinessScore}`;
                 meta.appendChild(readiness);
             }
-            meta.appendChild(document.createTextNode(`${s.readinessScore != null ? ' • ' : ''}Type: ${s.type || 'training'}`));
+            const typeText = `Type: ${s.type || 'training'}`;
+            meta.appendChild(document.createTextNode(s.readinessScore != null ? ` • ${typeText}` : typeText));
 
             const delBtn = document.createElement('button');
             delBtn.style.border = 'none';
