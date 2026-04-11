@@ -2444,9 +2444,9 @@
         container.appendChild(card);
         
         setTimeout(() => {
-            const calView = document.getElementById('view-calendar');
-            if (calView) {
-                calView.scrollTo({ top: calView.scrollHeight, behavior: 'smooth' });
+            const detailPanel = document.getElementById('calendar-day-details');
+            if (detailPanel) {
+                detailPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }
         }, 300);
     }
