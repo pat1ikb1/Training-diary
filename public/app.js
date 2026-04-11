@@ -476,6 +476,7 @@
         document.getElementById('set-duration').value = appState.settings.duration || '180';
         document.getElementById('set-theme').checked = appState.settings.lightMode;
         if(appState.settings.lightMode) document.body.classList.add('light-mode');
+        else document.body.classList.remove('light-mode');
     }
 
     function initApp() {
@@ -509,7 +510,11 @@
 
         if(tabId === 'dashboard') renderDashboard();
         if(tabId === 'history') renderHistory();
-        if(tabId === 'log') { document.getElementById('log-date').value = new Date().toISOString().split('T')[0]; checkLogReadiness(); renderSessionList(); renderLogSparkline(); }
+        if(tabId === 'log') { 
+            let dEl = document.getElementById('log-date');
+            if(!dEl.value) dEl.value = new Date().toISOString().split('T')[0];
+            checkLogReadiness(); renderSessionList(); renderLogSparkline(); 
+        }
         if(tabId === 'prs') { renderPBsTrack(); renderPBsGym(); renderLogSparkline(); }
         if(tabId === 'calendar') renderCalendar(new Date().getFullYear(), new Date().getMonth());
     }
@@ -549,10 +554,16 @@
     }
 
     function saveSettings() {
-        appState.settings.name = document.getElementById('set-name').value;
-        appState.settings.age = document.getElementById('set-age').value;
-        appState.settings.initDuration = document.getElementById('set-init-duration').value;
-        appState.settings.duration = document.getElementById('set-duration').value;
+        appState.settings.name = document.getElementById('set-name').value.trim() || 'Athlete';
+        let ageVal = parseInt(document.getElementById('set-age').value, 10);
+        appState.settings.age = (!isNaN(ageVal) && ageVal > 0) ? ageVal : 30;
+        
+        let initD = parseInt(document.getElementById('set-init-duration').value, 10);
+        appState.settings.initDuration = (!isNaN(initD) && initD > 0) ? String(initD) : '60';
+        
+        let dur = parseInt(document.getElementById('set-duration').value, 10);
+        appState.settings.duration = (!isNaN(dur) && dur >= 30) ? String(dur) : '180';
+        
         appState.settings.lightMode = document.getElementById('set-theme').checked;
         localStorage.setItem('omegahrv_settings', JSON.stringify(appState.settings));
         pushProfile(); // sync to cloud
@@ -1070,9 +1081,14 @@
     }
     // --- TRAINING DIARY LOGIC ---
     function checkLogReadiness() {
-        let date = document.getElementById('log-date').value;
+        let dateInput = document.getElementById('log-date').value;
+        let date = normalizeDate(dateInput);
         let badge = document.getElementById('log-readiness-badge');
-        let exactMatch = appState.measurements.find(m => m.date.startsWith(date));
+        if(!date) {
+            badge.style.display = 'none';
+            return;
+        }
+        let exactMatch = appState.measurements.find(m => normalizeDate(m.date) === date);
         if(exactMatch) {
             badge.style.display = 'block';
             badge.innerText = `Readiness: ${exactMatch.readiness}/100`;
@@ -1248,6 +1264,7 @@
         };
 
         if(type === 'running') {
+            if (typeof recalcRunTotals === 'function') recalcRunTotals();
             let dataRows = qsa('#run-splits-table tbody tr.split-data-row');
             let splits = dataRows.map(tr => {
                 let kinRow = tr.nextElementSibling;
@@ -1419,7 +1436,7 @@
             const dt = document.createElement('span');
             dt.style.fontSize = '0.8rem';
             dt.style.color = 'var(--text-muted)';
-            dt.textContent = `${s.date} ${s.time}`;
+            dt.textContent = `${s.date || 'Unknown Date'} ${s.time || ''}`.trim();
 
             header.appendChild(title);
             header.appendChild(dt);
@@ -1730,12 +1747,22 @@
                 sh.style.marginTop = '10px';
                 sh.textContent = 'Sessions';
                 card.appendChild(sh);
+
+                const renderIfPresent = (container, labelText, val, suffix = '') => {
+                    if (val !== null && val !== undefined && val !== '' && !Number.isNaN(val)) {
+                        const line = document.createElement('div');
+                        line.style.marginTop = '2px';
+                        line.innerHTML = `<strong>${labelText}:</strong> ${val}${suffix}`;
+                        container.appendChild(line);
+                    }
+                };
+
                 sessions.forEach(s => {
                     try {
                         const row = document.createElement('div');
                         row.style.borderLeft = '2px solid var(--accent)';
                         row.style.paddingLeft = '10px';
-                        row.style.marginBottom = '10px';
+                        row.style.marginBottom = '15px';
                         row.style.fontSize = '0.85rem';
                         
                         let typeStr = (typeof s.type === 'string' && s.type.length > 0) ? s.type : 'Training';
@@ -1744,32 +1771,139 @@
                         
                         const span = document.createElement('div');
                         span.style.color = 'var(--text-muted)';
-                        span.textContent = `RPE ${s.rpe || '--'}/10 | ${s.time || '--'}`;
+                        span.textContent = `RPE ${s.rpe || '--'}/10 | Date: ${s.date || 'Unknown'} ${s.time || ''}`.trim();
                         row.appendChild(st);
                         row.appendChild(span);
                         
                         const det = document.createElement('div');
-                        det.style.marginTop = '4px';
+                        det.style.marginTop = '6px';
                         det.style.fontSize = '0.8rem';
+                        
                         if(s.type === 'running' && typeof s.running === 'object' && s.running !== null) {
                             const distDisplay = s.running.totalDistance >= 1000
                                 ? (s.running.totalDistance / 1000).toFixed(2) + ' km'
                                 : (s.running.totalDistance || 0) + ' m';
                             const durDisplay = formatTimeLength(s.running.totalTime || 0);
-                            det.textContent = `Dist: ${distDisplay} | Dur: ${durDisplay}${Array.isArray(s.running.splits) ? ` | ${s.running.splits.length} splits` : ''}`;
-                        } else if (s.type === 'weightlifting' && s.lifting && Array.isArray(s.lifting.exercises)) {
-                            const lNames = s.lifting.exercises.map(l =>
-                                `${l.name} (${Array.isArray(l.sets) ? l.sets.length : 0} sets)`
-                            ).join(', ');
-                            det.textContent = lNames || 'No exercises logged';
+                            
+                            let runBlock = document.createElement('div');
+                            renderIfPresent(runBlock, 'Total Distance', distDisplay);
+                            renderIfPresent(runBlock, 'Total Time', durDisplay);
+                            
+                            if (s.running.totalDistance > 0 && s.running.totalTime > 0) {
+                                let speedMs = s.running.totalDistance / s.running.totalTime;
+                                let paceSecs = 1000 / speedMs;
+                                renderIfPresent(runBlock, 'Avg Pace', formatTimeLength(paceSecs) + ' /km');
+                            }
+
+                            if (Array.isArray(s.running.splits) && s.running.splits.length > 0) {
+                                let splitsTitle = document.createElement('div');
+                                splitsTitle.style.marginTop = '6px';
+                                splitsTitle.style.fontWeight = 'bold';
+                                splitsTitle.textContent = `Splits (${s.running.splits.length})`;
+                                runBlock.appendChild(splitsTitle);
+                                
+                                s.running.splits.forEach((split, idx) => {
+                                    let sRow = document.createElement('div');
+                                    sRow.style.marginLeft = '8px';
+                                    sRow.style.paddingLeft = '6px';
+                                    sRow.style.borderLeft = '1px solid var(--border)';
+                                    sRow.style.marginTop = '4px';
+                                    
+                                    let summary = document.createElement('div');
+                                    summary.innerHTML = `<em>${split.label || `Split ${idx+1}`}</em>: ${split.distance||0}m in ${split.time||0}s`;
+                                    if (split.rest) summary.innerHTML += ` (Rest: ${split.rest}s)`;
+                                    sRow.appendChild(summary);
+                                    
+                                    if (split.kinematics) {
+                                        let kinText = [];
+                                        if(split.kinematics.gct) kinText.push(`GCT: ${split.kinematics.gct}ms`);
+                                        if(split.kinematics.ft) kinText.push(`Flight: ${split.kinematics.ft}ms`);
+                                        if(split.kinematics.sl) kinText.push(`Stride: ${split.kinematics.sl}m`);
+                                        if(split.kinematics.sf) kinText.push(`Freq: ${split.kinematics.sf}s/m`);
+                                        if(split.kinematics.vo) kinText.push(`Vert: ${split.kinematics.vo}cm`);
+                                        if(kinText.length > 0) {
+                                            let kDiv = document.createElement('div');
+                                            kDiv.style.color = 'var(--text-muted)';
+                                            kDiv.style.fontSize = '0.75rem';
+                                            kDiv.textContent = '└ ' + kinText.join(' | ');
+                                            sRow.appendChild(kDiv);
+                                        }
+                                    }
+                                    runBlock.appendChild(sRow);
+                                });
+                            }
+                            det.appendChild(runBlock);
+                            
+                        } else if (s.type === 'weightlifting' && s.lifting) {
+                            let liftBlock = document.createElement('div');
+                            renderIfPresent(liftBlock, 'Duration', s.lifting.duration);
+                            
+                            if (Array.isArray(s.lifting.modalities) && s.lifting.modalities.length > 0) {
+                                renderIfPresent(liftBlock, 'Modalities', s.lifting.modalities.join(', '));
+                            }
+                            
+                            if (Array.isArray(s.lifting.exercises) && s.lifting.exercises.length > 0) {
+                                let exTitle = document.createElement('div');
+                                exTitle.style.marginTop = '6px';
+                                exTitle.style.fontWeight = 'bold';
+                                exTitle.textContent = `Exercises (${s.lifting.exercises.length})`;
+                                liftBlock.appendChild(exTitle);
+                                
+                                s.lifting.exercises.forEach(ex => {
+                                    let exRow = document.createElement('div');
+                                    exRow.style.marginLeft = '8px';
+                                    exRow.style.marginTop = '4px';
+                                    let nameRow = document.createElement('div');
+                                    nameRow.innerHTML = `<strong>${ex.name || 'Unknown'}</strong>`;
+                                    exRow.appendChild(nameRow);
+                                    
+                                    if (Array.isArray(ex.sets)) {
+                                        let sList = document.createElement('ul');
+                                        sList.style.margin = '2px 0 0 16px';
+                                        sList.style.padding = '0';
+                                        sList.style.color = 'var(--text-muted)';
+                                        ex.sets.forEach((set, sIdx) => {
+                                            let li = document.createElement('li');
+                                            li.style.listStyleType = 'circle';
+                                            let setStr = `Set ${sIdx+1}: ${set.load||0}kg x ${set.reps||0} (${set.type||'working'})`;
+                                            if (set.peakPower) setStr += ` [Peak: ${set.peakPower}W]`;
+                                            li.textContent = setStr;
+                                            sList.appendChild(li);
+                                        });
+                                        exRow.appendChild(sList);
+                                    }
+                                    liftBlock.appendChild(exRow);
+                                });
+                            } else {
+                                let noEx = document.createElement('div');
+                                noEx.textContent = 'No exercises logged';
+                                noEx.style.color = 'var(--text-muted)';
+                                liftBlock.appendChild(noEx);
+                            }
+                            det.appendChild(liftBlock);
+                            
                         } else if (s.other && typeof s.other === 'object') {
-                            det.textContent = `Activity: ${s.other.activity || 'Unknown'} | Dur: ${s.other.duration || '00:00'}`;
+                            let otherBlock = document.createElement('div');
+                            renderIfPresent(otherBlock, 'Activity', s.other.activity || 'Unknown');
+                            renderIfPresent(otherBlock, 'Duration', s.other.duration || '00:00');
+                            det.appendChild(otherBlock);
+                        }
+                        
+                        if (s.hasPB) {
+                            let pbBlock = document.createElement('div');
+                            pbBlock.style.color = 'var(--accent)';
+                            pbBlock.style.marginTop = '6px';
+                            pbBlock.textContent = `★ Personal Bests: ${(s.pbDetails || []).map(p => p.metric).join(', ') || 'Achieved'}`;
+                            det.appendChild(pbBlock);
                         }
                         
                         if (s.notes) {
-                            const notesEl = document.createElement('div');
+                            let notesEl = document.createElement('div');
                             notesEl.style.fontStyle = 'italic';
-                            notesEl.style.marginTop = '4px';
+                            notesEl.style.marginTop = '6px';
+                            notesEl.style.padding = '6px';
+                            notesEl.style.background = 'var(--bg)';
+                            notesEl.style.borderRadius = '4px';
                             notesEl.style.color = 'var(--text-muted)';
                             notesEl.textContent = `"${s.notes}"`;
                             det.appendChild(notesEl);
