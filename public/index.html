@@ -267,7 +267,11 @@
                 </div>
             </div>
 
-            <button class="primary" style="margin-top: 20px; font-weight: 600;" onclick="saveSession()">Save Session</button>
+            <button id="save-session-btn" class="primary" style="margin-top: 20px; font-weight: 600;" onclick="saveSession()">Save Session</button>
+            <div id="log-edit-state" class="card-row" style="display:none; margin-top:8px; align-items:center;">
+                <span id="log-edit-state-text" style="font-size:0.85rem; color:var(--text-muted);">Editing session</span>
+                <button style="width:auto; min-height:32px; padding:6px 10px; font-size:0.8rem;" onclick="cancelSessionEdit()">Cancel edit</button>
+            </div>
 
             <h3 style="font-size: 1.1rem; margin-top: 30px; border-bottom: 1px solid var(--border); padding-bottom: 5px;">Recent Sessions</h3>
             <div id="log-session-list" style="display: flex; flex-direction: column; gap: 10px; margin-top: 10px;">
@@ -332,7 +336,7 @@
 
         <!-- HISTORY -->
         <div class="view" id="view-history">
-            <h2 style="font-size: 1.2rem;">30-Day History</h2>
+            <h2 style="font-size: 1.2rem;">History (chart: last 30 days)</h2>
             <div class="card">
                 <div class="chart-container">
                     <canvas id="historyChart"></canvas>
@@ -340,6 +344,10 @@
             </div>
             <div class="card" id="history-list" style="flex: 1; overflow-y: auto;">
                 <!-- list items injected here -->
+            </div>
+            <div class="card" id="history-session-card">
+                <h3 style="font-size:1rem; margin-bottom:8px;">Session History</h3>
+                <div id="history-session-list" style="display:flex; flex-direction:column; gap:10px;"></div>
             </div>
         </div>
 
