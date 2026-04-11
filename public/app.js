@@ -1299,6 +1299,7 @@
     function addExSet(btn) {
         let tbody = btn.previousElementSibling.querySelector('tbody');
         let tr = document.createElement('tr');
+        tr.className = 'set-data-row';
         tr.innerHTML = `
             <td><input type="number" class="set-reps" placeholder="0"></td>
             <td><input type="number" step="any" class="set-load" placeholder="kg"></td>
@@ -1490,7 +1491,7 @@
                 const card = cards[cards.length - 1];
                 if (!card) return;
                 card.querySelector('.ex-name').value = ex.name || '';
-                const rows = card.querySelectorAll('tbody tr');
+                const rows = card.querySelectorAll('tbody tr.set-data-row');
                 if (Array.isArray(ex.sets) && ex.sets.length > 0) {
                     if (rows[0]) {
                         const metricsRow = rows[0].nextElementSibling;
@@ -1505,8 +1506,8 @@
                     }
                     for (let i = 1; i < ex.sets.length; i++) {
                         addExSet(card.querySelector('button:last-child'));
-                        const lastRows = card.querySelectorAll('tbody tr');
-                        const row = lastRows[lastRows.length - 2];
+                        const lastRows = card.querySelectorAll('tbody tr.set-data-row');
+                        const row = lastRows[lastRows.length - 1];
                         const metricsRow = row?.nextElementSibling;
                         if (!row) continue;
                         row.querySelector('.set-reps').value = ex.sets[i].reps || '';
@@ -1588,7 +1589,7 @@
             };
         } else if(type === 'weightlifting') {
             let exs = qsa('.lift-ex-card').map(card => {
-                let sRows = card.querySelectorAll('tbody tr:not(.split-kin-row)');
+                let sRows = card.querySelectorAll('tbody tr.set-data-row');
                 return {
                     name: card.querySelector('.ex-name').value.trim() || 'Unknown',
                     sets: [...sRows].map(r => {
