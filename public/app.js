@@ -498,6 +498,7 @@
         document.getElementById('set-duration').value = appState.settings.duration || '180';
         document.getElementById('set-theme').checked = appState.settings.lightMode;
         if(appState.settings.lightMode) document.body.classList.add('light-mode');
+        else document.body.classList.remove('light-mode');
     }
 
     function initApp() {
@@ -531,7 +532,11 @@
 
         if(tabId === 'dashboard') renderDashboard();
         if(tabId === 'history') renderHistory();
-        if(tabId === 'log') { document.getElementById('log-date').value = new Date().toISOString().split('T')[0]; checkLogReadiness(); renderSessionList(); renderLogSparkline(); }
+        if(tabId === 'log') { 
+            let dEl = document.getElementById('log-date');
+            if(!dEl.value) dEl.value = new Date().toISOString().split('T')[0];
+            checkLogReadiness(); renderSessionList(); renderLogSparkline(); 
+        }
         if(tabId === 'prs') { renderPBsTrack(); renderPBsGym(); renderLogSparkline(); }
         if(tabId === 'calendar') renderCalendar(new Date().getFullYear(), new Date().getMonth());
     }
@@ -573,10 +578,16 @@
     }
 
     function saveSettings() {
-        appState.settings.name = document.getElementById('set-name').value;
-        appState.settings.age = document.getElementById('set-age').value;
-        appState.settings.initDuration = document.getElementById('set-init-duration').value;
-        appState.settings.duration = document.getElementById('set-duration').value;
+        appState.settings.name = document.getElementById('set-name').value.trim() || 'Athlete';
+        let ageVal = parseInt(document.getElementById('set-age').value, 10);
+        appState.settings.age = (!isNaN(ageVal) && ageVal > 0) ? ageVal : 30;
+        
+        let initD = parseInt(document.getElementById('set-init-duration').value, 10);
+        appState.settings.initDuration = (!isNaN(initD) && initD > 0) ? String(initD) : '60';
+        
+        let dur = parseInt(document.getElementById('set-duration').value, 10);
+        appState.settings.duration = (!isNaN(dur) && dur >= 30) ? String(dur) : '180';
+        
         appState.settings.lightMode = document.getElementById('set-theme').checked;
         localStorage.setItem('omegahrv_settings', JSON.stringify(appState.settings));
         pushProfile(); // sync to cloud
@@ -1157,9 +1168,14 @@
     }
     // --- TRAINING DIARY LOGIC ---
     function checkLogReadiness() {
-        let date = document.getElementById('log-date').value;
+        let dateInput = document.getElementById('log-date').value;
+        let date = normalizeDate(dateInput);
         let badge = document.getElementById('log-readiness-badge');
-        let exactMatch = appState.measurements.find(m => m.date.startsWith(date));
+        if(!date) {
+            badge.style.display = 'none';
+            return;
+        }
+        let exactMatch = appState.measurements.find(m => normalizeDate(m.date) === date);
         if(exactMatch) {
             badge.style.display = 'block';
             badge.innerText = `Readiness: ${exactMatch.readiness}/100`;
@@ -1487,6 +1503,7 @@
         };
 
         if(type === 'running') {
+            if (typeof recalcRunTotals === 'function') recalcRunTotals();
             let dataRows = qsa('#run-splits-table tbody tr.split-data-row');
             let splits = dataRows.map(tr => {
                 let kinRow = tr.nextElementSibling;
@@ -1673,7 +1690,7 @@
             const dt = document.createElement('span');
             dt.style.fontSize = '0.8rem';
             dt.style.color = 'var(--text-muted)';
-            dt.textContent = `${s.date} ${s.time}`;
+            dt.textContent = `${s.date || 'Unknown Date'} ${s.time || ''}`.trim();
 
             header.appendChild(title);
             header.appendChild(dt);
@@ -1853,8 +1870,8 @@
             let el = document.createElement('div');
             el.className = 'cal-day' + (dateStr === todayStr ? ' today' : '');
             
-            let om = appState.measurements.find(m => m.date.startsWith(dateStr));
-            let sesss = appState.sessions.filter(s => s.date === dateStr);
+            let om = appState.measurements.find(m => normalizeDate(m.date) === dateStr);
+            let sesss = appState.sessions.filter(s => normalizeDate(s.date) === dateStr);
             
             let indHTML = '';
             if(om) {
@@ -1876,11 +1893,17 @@
             } else {
                 el.setAttribute('aria-label', `${dateStr}: no data`);
             }
-            el.onclick = () => {
-                const liveMeas = appState.measurements.find(m => m.date.startsWith(dateStr));
-                const liveSess = appState.sessions.filter(s => s.date === dateStr);
-                openDayModal(dateStr, liveMeas, liveSess);
-            };
+            
+            el.setAttribute('data-date', dateStr);
+            el.setAttribute('role', 'button');
+            el.setAttribute('tabindex', '0');
+            el.addEventListener('click', handleDayInteraction);
+            el.addEventListener('keydown', (e) => {
+                if(e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleDayInteraction.call(el);
+                }
+            });
             c.appendChild(el);
         }
         
@@ -1892,6 +1915,28 @@
         }
     }
     window.renderCalendar = renderCalendar;
+
+    function normalizeDate(dateVal) {
+        if (!dateVal) return null;
+        if (typeof dateVal === 'string') {
+            if (/^\d{4}-\d{2}-\d{2}$/.test(dateVal)) return dateVal;
+            const parsed = new Date(dateVal);
+            if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+            return null;
+        }
+        if (dateVal instanceof Date && !isNaN(dateVal.getTime())) {
+             return dateVal.toISOString().split('T')[0];
+        }
+        return null;
+    }
+
+    function handleDayInteraction() {
+        const dateStr = this.getAttribute('data-date');
+        if (!dateStr) return;
+        const liveMeas = appState.measurements.find(m => normalizeDate(m.date) === dateStr);
+        const liveSess = appState.sessions.filter(s => normalizeDate(s.date) === dateStr);
+        openDayModal(dateStr, liveMeas, liveSess);
+    }
 
     function openDayModal(date, om, sessions) {
         let container = document.getElementById('calendar-day-details');
@@ -1925,105 +1970,227 @@
         title.textContent = "Details for " + date;
         card.appendChild(title);
 
-        if (om) {
-            const metricsCard = document.createElement('div');
-            metricsCard.className = 'card';
-            metricsCard.style.background = 'var(--bg)';
-            metricsCard.style.fontSize = '0.85rem';
-            const strong = document.createElement('strong');
-            strong.style.fontSize = '1rem';
-            strong.style.color = 'var(--accent)';
-            strong.textContent = `Readiness: ${om.readiness}/100`;
-            const details = document.createElement('div');
-            details.textContent = `RMSSD ${Math.round(om.rmssd)}ms | HR ${Math.round(om.meanHR)}bpm | SDNN ${Math.round(om.sdnn)}`;
-            metricsCard.appendChild(strong);
-            metricsCard.appendChild(details);
-            card.appendChild(metricsCard);
+        if (!om && sessions.length === 0) {
+            const emptyP = document.createElement('p');
+            emptyP.style.fontSize = '0.85rem';
+            emptyP.style.color = 'var(--text-muted)';
+            emptyP.textContent = 'No sessions or measurements recorded on this day.';
+            card.appendChild(emptyP);
         } else {
-            const p = document.createElement('p');
-            p.style.fontSize = '0.85rem';
-            p.style.color = 'var(--text-muted)';
-            p.textContent = 'No readiness data.';
-            card.appendChild(p);
-        }
+            if (om) {
+                const metricsCard = document.createElement('div');
+                metricsCard.className = 'card';
+                metricsCard.style.background = 'var(--bg)';
+                metricsCard.style.fontSize = '0.85rem';
+                const strong = document.createElement('strong');
+                strong.style.fontSize = '1rem';
+                strong.style.color = 'var(--accent)';
+                strong.textContent = `Readiness: ${om.readiness}/100`;
+                const details = document.createElement('div');
+                details.textContent = `RMSSD ${Math.round(om.rmssd)}ms | HR ${Math.round(om.meanHR)}bpm | SDNN ${Math.round(om.sdnn)}`;
+                metricsCard.appendChild(strong);
+                metricsCard.appendChild(details);
+                card.appendChild(metricsCard);
+            } else {
+                const p = document.createElement('p');
+                p.style.fontSize = '0.85rem';
+                p.style.color = 'var(--text-muted)';
+                p.textContent = 'No readiness data.';
+                card.appendChild(p);
+            }
+    
+            if (sessions.length > 0) {
+                const sh = document.createElement('h3');
+                sh.style.fontSize = '1rem';
+                sh.style.marginTop = '10px';
+                sh.textContent = 'Sessions';
+                card.appendChild(sh);
+                const renderIfPresent = (container, labelText, val, suffix = '') => {
+                    if (val !== null && val !== undefined && val !== '' && !Number.isNaN(val)) {
+                        const line = document.createElement('div');
+                        line.style.marginTop = '2px';
+                        line.innerHTML = `<strong>${labelText}:</strong> ${val}${suffix}`;
+                        container.appendChild(line);
+                    }
+                };
 
-        if (sessions.length > 0) {
-            const sh = document.createElement('h3');
-            sh.style.fontSize = '1rem';
-            sh.style.marginTop = '10px';
-            sh.textContent = 'Sessions';
-            card.appendChild(sh);
-            sessions.forEach(s => {
-                const row = document.createElement('div');
-                row.style.borderLeft = '2px solid var(--accent)';
-                row.style.paddingLeft = '10px';
-                row.style.marginBottom = '10px';
-                row.style.fontSize = '0.85rem';
-                
-                let typeStr = (typeof s.type === 'string' && s.type.length > 0) ? s.type : 'Training';
-                const st = document.createElement('strong');
-                st.textContent = s.title || (typeStr.charAt(0).toUpperCase() + typeStr.slice(1) + ' Session');
-                
-                const span = document.createElement('div');
-                span.style.color = 'var(--text-muted)';
-                span.textContent = `RPE ${s.rpe || '--'}/10 | ${s.time || '--'}`;
-                row.appendChild(st);
-                row.appendChild(span);
+                sessions.forEach(s => {
+                    try {
+                        const row = document.createElement('div');
+                        row.style.borderLeft = '2px solid var(--accent)';
+                        row.style.paddingLeft = '10px';
+                        row.style.marginBottom = '15px';
+                        row.style.fontSize = '0.85rem';
+                        
+                        let typeStr = (typeof s.type === 'string' && s.type.length > 0) ? s.type : 'Training';
+                        const st = document.createElement('strong');
+                        st.textContent = s.title || (typeStr.charAt(0).toUpperCase() + typeStr.slice(1) + ' Session');
+                        
+                        const span = document.createElement('div');
+                        span.style.color = 'var(--text-muted)';
+                        span.textContent = `RPE ${s.rpe || '--'}/10 | Date: ${s.date || 'Unknown'} ${s.time || ''}`.trim();
+                        row.appendChild(st);
+                        row.appendChild(span);
 
-                const actions = document.createElement('div');
-                actions.style.marginTop = '6px';
-                const editBtn = document.createElement('button');
-                editBtn.style.width = 'auto';
-                editBtn.style.minHeight = 'unset';
-                editBtn.style.padding = '4px 10px';
-                editBtn.style.fontSize = '0.75rem';
-                editBtn.textContent = 'Edit session';
-                editBtn.dataset.sessionEditId = sessionIdValue(s);
-                actions.appendChild(editBtn);
-                row.appendChild(actions);
-                
-                const det = document.createElement('div');
-                det.style.marginTop = '4px';
-                det.style.fontSize = '0.8rem';
-                if(s.type === 'running' && typeof s.running === 'object' && s.running !== null) {
-                    const distDisplay = s.running.totalDistance >= 1000
-                        ? (s.running.totalDistance / 1000).toFixed(2) + ' km'
-                        : (s.running.totalDistance || 0) + ' m';
-                    const durDisplay = formatTimeLength(s.running.totalTime || 0);
-                    det.textContent = `Dist: ${distDisplay} | Dur: ${durDisplay}${Array.isArray(s.running.splits) ? ` | ${s.running.splits.length} splits` : ''}`;
-                } else if (s.type === 'weightlifting' && s.lifting && Array.isArray(s.lifting.exercises)) {
-                    const lNames = s.lifting.exercises.map(l =>
-                        `${l.name} (${Array.isArray(l.sets) ? l.sets.length : 0} sets)`
-                    ).join(', ');
-                    det.textContent = lNames || 'No exercises logged';
-                } else if (s.other && typeof s.other === 'object') {
-                    det.textContent = `Activity: ${s.other.activity || 'Unknown'} | Dur: ${s.other.duration || '00:00'}`;
-                }
-                
-                if (s.notes) {
-                    const notesEl = document.createElement('div');
-                    notesEl.style.fontStyle = 'italic';
-                    notesEl.style.marginTop = '4px';
-                    notesEl.style.color = 'var(--text-muted)';
-                    notesEl.textContent = `"${s.notes}"`;
-                    det.appendChild(notesEl);
-                }
+                        const actions = document.createElement('div');
+                        actions.style.marginTop = '6px';
+                        const editBtn = document.createElement('button');
+                        editBtn.style.width = 'auto';
+                        editBtn.style.minHeight = 'unset';
+                        editBtn.style.padding = '4px 10px';
+                        editBtn.style.fontSize = '0.75rem';
+                        editBtn.textContent = 'Edit session';
+                        editBtn.dataset.sessionEditId = sessionIdValue(s);
+                        actions.appendChild(editBtn);
+                        row.appendChild(actions);
+                        
+                        const det = document.createElement('div');
+                        det.style.marginTop = '6px';
+                        det.style.fontSize = '0.8rem';
+                        
+                        if(s.type === 'running' && typeof s.running === 'object' && s.running !== null) {
+                            const distDisplay = s.running.totalDistance >= 1000
+                                ? (s.running.totalDistance / 1000).toFixed(2) + ' km'
+                                : (s.running.totalDistance || 0) + ' m';
+                            const durDisplay = formatTimeLength(s.running.totalTime || 0);
+                            
+                            let runBlock = document.createElement('div');
+                            renderIfPresent(runBlock, 'Total Distance', distDisplay);
+                            renderIfPresent(runBlock, 'Total Time', durDisplay);
+                            
+                            if (s.running.totalDistance > 0 && s.running.totalTime > 0) {
+                                let speedMs = s.running.totalDistance / s.running.totalTime;
+                                let paceSecs = 1000 / speedMs;
+                                renderIfPresent(runBlock, 'Avg Pace', formatTimeLength(paceSecs) + ' /km');
+                            }
 
-                if (s.hasPB && Array.isArray(s.pbDetails) && s.pbDetails.length > 0) {
-                    const pbWrap = document.createElement('div');
-                    pbWrap.style.marginTop = '6px';
-                    s.pbDetails.forEach((pbTxt) => {
-                        const pill = document.createElement('span');
-                        pill.className = 'pb-pill';
-                        pill.textContent = pbTxt;
-                        pbWrap.appendChild(pill);
-                    });
-                    det.appendChild(pbWrap);
-                }
-                
-                row.appendChild(det);
-                card.appendChild(row);
-            });
+                            if (Array.isArray(s.running.splits) && s.running.splits.length > 0) {
+                                let splitsTitle = document.createElement('div');
+                                splitsTitle.style.marginTop = '6px';
+                                splitsTitle.style.fontWeight = 'bold';
+                                splitsTitle.textContent = `Splits (${s.running.splits.length})`;
+                                runBlock.appendChild(splitsTitle);
+                                
+                                s.running.splits.forEach((split, idx) => {
+                                    let sRow = document.createElement('div');
+                                    sRow.style.marginLeft = '8px';
+                                    sRow.style.paddingLeft = '6px';
+                                    sRow.style.borderLeft = '1px solid var(--border)';
+                                    sRow.style.marginTop = '4px';
+                                    
+                                    let summary = document.createElement('div');
+                                    summary.innerHTML = `<em>${split.label || `Split ${idx+1}`}</em>: ${split.distance||0}m in ${split.time||0}s`;
+                                    if (split.rest) summary.innerHTML += ` (Rest: ${split.rest}s)`;
+                                    sRow.appendChild(summary);
+                                    
+                                    if (split.kinematics) {
+                                        let kinText = [];
+                                        if(split.kinematics.gct) kinText.push(`GCT: ${split.kinematics.gct}ms`);
+                                        if(split.kinematics.ft) kinText.push(`Flight: ${split.kinematics.ft}ms`);
+                                        if(split.kinematics.sl) kinText.push(`Stride: ${split.kinematics.sl}m`);
+                                        if(split.kinematics.sf) kinText.push(`Freq: ${split.kinematics.sf}s/m`);
+                                        if(split.kinematics.vo) kinText.push(`Vert: ${split.kinematics.vo}cm`);
+                                        if(kinText.length > 0) {
+                                            let kDiv = document.createElement('div');
+                                            kDiv.style.color = 'var(--text-muted)';
+                                            kDiv.style.fontSize = '0.75rem';
+                                            kDiv.textContent = '└ ' + kinText.join(' | ');
+                                            sRow.appendChild(kDiv);
+                                        }
+                                    }
+                                    runBlock.appendChild(sRow);
+                                });
+                            }
+                            det.appendChild(runBlock);
+                            
+                        } else if (s.type === 'weightlifting' && s.lifting) {
+                            let liftBlock = document.createElement('div');
+                            renderIfPresent(liftBlock, 'Duration', s.lifting.duration);
+                            
+                            if (Array.isArray(s.lifting.modalities) && s.lifting.modalities.length > 0) {
+                                renderIfPresent(liftBlock, 'Modalities', s.lifting.modalities.join(', '));
+                            }
+                            
+                            if (Array.isArray(s.lifting.exercises) && s.lifting.exercises.length > 0) {
+                                let exTitle = document.createElement('div');
+                                exTitle.style.marginTop = '6px';
+                                exTitle.style.fontWeight = 'bold';
+                                exTitle.textContent = `Exercises (${s.lifting.exercises.length})`;
+                                liftBlock.appendChild(exTitle);
+                                
+                                s.lifting.exercises.forEach(ex => {
+                                    let exRow = document.createElement('div');
+                                    exRow.style.marginLeft = '8px';
+                                    exRow.style.marginTop = '4px';
+                                    let nameRow = document.createElement('div');
+                                    nameRow.innerHTML = `<strong>${ex.name || 'Unknown'}</strong>`;
+                                    exRow.appendChild(nameRow);
+                                    
+                                    if (Array.isArray(ex.sets)) {
+                                        let sList = document.createElement('ul');
+                                        sList.style.margin = '2px 0 0 16px';
+                                        sList.style.padding = '0';
+                                        sList.style.color = 'var(--text-muted)';
+                                        ex.sets.forEach((set, sIdx) => {
+                                            let li = document.createElement('li');
+                                            li.style.listStyleType = 'circle';
+                                            let setStr = `Set ${sIdx+1}: ${set.load||0}kg x ${set.reps||0} (${set.type||'working'})`;
+                                            if (set.peakPower) setStr += ` [Peak: ${set.peakPower}W]`;
+                                            li.textContent = setStr;
+                                            sList.appendChild(li);
+                                        });
+                                        exRow.appendChild(sList);
+                                    }
+                                    liftBlock.appendChild(exRow);
+                                });
+                            } else {
+                                let noEx = document.createElement('div');
+                                noEx.textContent = 'No exercises logged';
+                                noEx.style.color = 'var(--text-muted)';
+                                liftBlock.appendChild(noEx);
+                            }
+                            det.appendChild(liftBlock);
+                            
+                        } else if (s.other && typeof s.other === 'object') {
+                            let otherBlock = document.createElement('div');
+                            renderIfPresent(otherBlock, 'Activity', s.other.activity || 'Unknown');
+                            renderIfPresent(otherBlock, 'Duration', s.other.duration || '00:00');
+                            det.appendChild(otherBlock);
+                        }
+                        
+                        if (s.hasPB && Array.isArray(s.pbDetails) && s.pbDetails.length > 0) {
+                            const pbWrap = document.createElement('div');
+                            pbWrap.style.marginTop = '6px';
+                            s.pbDetails.forEach((pbTxt) => {
+                                const pill = document.createElement('span');
+                                pill.className = 'pb-pill';
+                                pill.textContent = typeof pbTxt === 'string'
+                                    ? pbTxt
+                                    : (pbTxt?.metric || pbTxt?.label || 'PB');
+                                pbWrap.appendChild(pill);
+                            });
+                            det.appendChild(pbWrap);
+                        }
+                        
+                        if (s.notes) {
+                            let notesEl = document.createElement('div');
+                            notesEl.style.fontStyle = 'italic';
+                            notesEl.style.marginTop = '6px';
+                            notesEl.style.padding = '6px';
+                            notesEl.style.background = 'var(--bg)';
+                            notesEl.style.borderRadius = '4px';
+                            notesEl.style.color = 'var(--text-muted)';
+                            notesEl.textContent = `"${s.notes}"`;
+                            det.appendChild(notesEl);
+                        }
+                        
+                        row.appendChild(det);
+                        card.appendChild(row);
+                    } catch (err) {
+                        console.error('Failed to parse session layout details for a record:', s, err);
+                    }
+                });
+            }
         }
         container.appendChild(card);
         
