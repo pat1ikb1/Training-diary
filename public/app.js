@@ -140,6 +140,12 @@
 
     let chartSpark = null;
     let chartHistory = null;
+    let editingSessionId = null;
+    const historyViewState = {
+        pageSize: 30,
+        renderedCount: 0,
+        items: []
+    };
 
     // --- SYNC STATUS UI ---
     function setSyncStatus(state, label) {
@@ -467,6 +473,22 @@
                 if (btn?.dataset.measurementId) deleteMeasurement(btn.dataset.measurementId);
             });
         }
+
+        const historySessionList = document.getElementById('history-session-list');
+        if (historySessionList) {
+            historySessionList.addEventListener('click', (e) => {
+                const editBtn = e.target.closest('button[data-session-edit-id]');
+                if (editBtn?.dataset.sessionEditId) startSessionEdit(editBtn.dataset.sessionEditId, 'history');
+            });
+        }
+
+        const calendarDetails = document.getElementById('calendar-day-details');
+        if (calendarDetails) {
+            calendarDetails.addEventListener('click', (e) => {
+                const editBtn = e.target.closest('button[data-session-edit-id]');
+                if (editBtn?.dataset.sessionEditId) startSessionEdit(editBtn.dataset.sessionEditId, 'calendar');
+            });
+        }
     });
 
     function applySettingsToUI() {
@@ -515,6 +537,8 @@
     }
 
     function toggleLogType(type) {
+        const radio = document.querySelector(`input[name="log-type"][value="${type}"]`);
+        if (radio) radio.checked = true;
         qsa('.log-form-section').forEach(el => el.style.display = 'none');
         document.getElementById('log-form-' + type).style.display = 'block';
     }
@@ -635,65 +659,127 @@
     }
 
     // --- HISTORY RENDER ---
+    function buildHistoryMeasurementItem(m) {
+        const dateStr = new Date(m.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+        let dotColor = m.rmssd >= 40 ? 'var(--success)' : m.rmssd >= 20 ? 'var(--warning)' : 'var(--danger)';
+        let statusText = m.rmssd >= 40 ? 'Good' : m.rmssd >= 20 ? 'Moderate' : 'Low';
+        const item = document.createElement('div');
+        item.className = 'history-item';
+
+        const left = document.createElement('div');
+        left.className = 'metrics';
+        const dot = document.createElement('span');
+        dot.className = 'dot';
+        dot.style.background = dotColor;
+        dot.setAttribute('aria-hidden', 'true');
+        const date = document.createElement('span');
+        date.className = 'date';
+        date.textContent = dateStr;
+        const status = document.createElement('span');
+        status.style.fontSize = '0.75rem';
+        status.textContent = `(${statusText})`;
+        left.appendChild(dot);
+        left.appendChild(date);
+        left.appendChild(status);
+
+        const right = document.createElement('div');
+        right.className = 'metrics';
+        const rmssd = document.createElement('strong');
+        rmssd.style.color = 'var(--text-main)';
+        rmssd.textContent = `${Math.round(m.rmssd)} ms`;
+        const score = document.createElement('span');
+        score.textContent = `(Score: ${m.readiness})`;
+        const deleteBtn = document.createElement('button');
+        deleteBtn.textContent = 'Delete';
+        deleteBtn.dataset.measurementId = fallbackMeasurementId(m);
+        deleteBtn.style.width = 'auto';
+        deleteBtn.style.minHeight = 'unset';
+        deleteBtn.style.padding = '4px 8px';
+        deleteBtn.style.fontSize = '0.75rem';
+        deleteBtn.style.color = 'var(--danger)';
+        right.appendChild(rmssd);
+        right.appendChild(score);
+        right.appendChild(deleteBtn);
+
+        item.appendChild(left);
+        item.appendChild(right);
+        return item;
+    }
+
+    function appendMoreHistoryItems() {
+        const listDiv = document.getElementById('history-list');
+        if (!listDiv || historyViewState.renderedCount >= historyViewState.items.length) return;
+        const nextCount = Math.min(historyViewState.items.length, historyViewState.renderedCount + historyViewState.pageSize);
+        const frag = document.createDocumentFragment();
+        for (let i = historyViewState.renderedCount; i < nextCount; i++) {
+            frag.appendChild(buildHistoryMeasurementItem(historyViewState.items[i]));
+        }
+        historyViewState.renderedCount = nextCount;
+        listDiv.appendChild(frag);
+    }
+
+    function renderHistorySessions() {
+        const list = document.getElementById('history-session-list');
+        if (!list) return;
+        list.innerHTML = '';
+        if (appState.sessions.length === 0) {
+            list.innerHTML = '<p style="font-size:0.85rem; color:var(--text-muted);">No sessions logged yet.</p>';
+            return;
+        }
+        appState.sessions.forEach((s) => {
+            const item = document.createElement('div');
+            item.className = 'history-session-item';
+
+            const left = document.createElement('div');
+            const title = document.createElement('strong');
+            title.style.fontSize = '0.9rem';
+            title.textContent = s.title || 'Training Session';
+            const meta = document.createElement('div');
+            meta.style.fontSize = '0.8rem';
+            meta.style.color = 'var(--text-muted)';
+            meta.textContent = `${s.date || '--'} ${s.time || '--:--'} • ${s.type || 'training'}`;
+            left.appendChild(title);
+            left.appendChild(meta);
+
+            const editBtn = document.createElement('button');
+            editBtn.style.width = 'auto';
+            editBtn.style.minHeight = 'unset';
+            editBtn.style.padding = '4px 10px';
+            editBtn.style.fontSize = '0.8rem';
+            editBtn.textContent = 'Edit';
+            editBtn.dataset.sessionEditId = sessionIdValue(s);
+
+            item.appendChild(left);
+            item.appendChild(editBtn);
+            list.appendChild(item);
+        });
+    }
+
     function renderHistory() {
         const listDiv = document.getElementById('history-list');
+        if (!listDiv) return;
         listDiv.innerHTML = '';
-        
-        const recent30 = appState.measurements.slice(-30);
-        
-        if (recent30.length === 0) {
+        listDiv.onscroll = null;
+
+        historyViewState.items = [...appState.measurements].reverse();
+        historyViewState.renderedCount = 0;
+
+        if (historyViewState.items.length === 0) {
             listDiv.innerHTML = '<p style="text-align: center; color: var(--text-muted); padding: 20px;">No measurements yet.</p>';
+            renderHistorySessions();
             return;
         }
 
-        [...recent30].reverse().forEach(m => {
-            const dateStr = new Date(m.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-            let dotColor = m.rmssd >= 40 ? 'var(--success)' : m.rmssd >= 20 ? 'var(--warning)' : 'var(--danger)';
-            let statusText = m.rmssd >= 40 ? 'Good' : m.rmssd >= 20 ? 'Moderate' : 'Low';
-            const item = document.createElement('div');
-            item.className = 'history-item';
+        appendMoreHistoryItems();
+        while (listDiv.scrollHeight <= listDiv.clientHeight && historyViewState.renderedCount < historyViewState.items.length) {
+            appendMoreHistoryItems();
+        }
+        listDiv.onscroll = () => {
+            if (listDiv.scrollTop + listDiv.clientHeight >= listDiv.scrollHeight - 80) appendMoreHistoryItems();
+        };
 
-            const left = document.createElement('div');
-            left.className = 'metrics';
-            const dot = document.createElement('span');
-            dot.className = 'dot';
-            dot.style.background = dotColor;
-            dot.setAttribute('aria-hidden', 'true');
-            const date = document.createElement('span');
-            date.className = 'date';
-            date.textContent = dateStr;
-            const status = document.createElement('span');
-            status.style.fontSize = '0.75rem';
-            status.textContent = `(${statusText})`;
-            left.appendChild(dot);
-            left.appendChild(date);
-            left.appendChild(status);
-
-            const right = document.createElement('div');
-            right.className = 'metrics';
-            const rmssd = document.createElement('strong');
-            rmssd.style.color = 'var(--text-main)';
-            rmssd.textContent = `${Math.round(m.rmssd)} ms`;
-            const score = document.createElement('span');
-            score.textContent = `(Score: ${m.readiness})`;
-            const deleteBtn = document.createElement('button');
-            deleteBtn.textContent = 'Delete';
-            deleteBtn.dataset.measurementId = fallbackMeasurementId(m);
-            deleteBtn.style.width = 'auto';
-            deleteBtn.style.minHeight = 'unset';
-            deleteBtn.style.padding = '4px 8px';
-            deleteBtn.style.fontSize = '0.75rem';
-            deleteBtn.style.color = 'var(--danger)';
-            right.appendChild(rmssd);
-            right.appendChild(score);
-            right.appendChild(deleteBtn);
-
-            item.appendChild(left);
-            item.appendChild(right);
-            listDiv.appendChild(item);
-        });
-
-        // 30-day Chart
+        // Keep chart on most recent 30 values.
+        const recent30 = appState.measurements.slice(-30);
         const ctx = document.getElementById('historyChart').getContext('2d');
         const labels = recent30.map(m => new Date(m.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }));
         const data = recent30.map(m => m.rmssd);
@@ -723,6 +809,7 @@
                 }
             }
         });
+        renderHistorySessions();
     }
 
     // --- BLUETOOTH MEASUREMENT ---
@@ -1093,7 +1180,7 @@
             <td><input type="text" placeholder="Split ${splitNum}" class="split-lbl"></td>
             <td><input type="number" step="any" placeholder="1000" class="split-dist"></td>
             <td><input type="text" placeholder="mm:ss" class="split-time"></td>
-            <td><input type="text" placeholder="mm:ss" class="split-rest" style="max-width:70px;"></td>
+            <td><input type="text" placeholder="min or mm:ss" class="split-rest" style="max-width:90px;"></td>
             <td class="split-kmh">--</td><td class="split-ms">--</td>
             <td style="display:flex; gap:2px; align-items:center;">
                 <button class="kin-toggle-btn" onclick="toggleSplitKin(this)">Kin ▾</button>
@@ -1141,7 +1228,7 @@
         qsa('#run-splits-table tbody tr.split-data-row').forEach(tr => {
             let d = parseFloat(tr.querySelector('.split-dist').value) || 0;
             let t = parseTime(tr.querySelector('.split-time').value) || 0;
-            let r = parseTime(tr.querySelector('.split-rest').value) || 0;
+            let r = parseRestSeconds(tr.querySelector('.split-rest').value) || 0;
             distAccum += d; timeAccum += t; restAccum += r;
         });
         document.getElementById('run-total-dist').innerText = distAccum > 0 ? (distAccum >= 1000 ? (distAccum/1000).toFixed(2) + ' km' : distAccum + ' m') : '0 m';
@@ -1211,6 +1298,22 @@
         if(p.length === 3) return parseFloat(p[0])*3600 + parseFloat(p[1])*60 + parseFloat(p[2]);
         return parseFloat(str) || 0;
     }
+
+    function parseRestSeconds(str) {
+        if (str == null) return 0;
+        const raw = String(str).trim();
+        if (!raw) return 0;
+        if (raw.includes(':')) return parseTime(raw);
+        const mins = parseFloat(raw);
+        return Number.isFinite(mins) ? mins * 60 : 0;
+    }
+
+    function formatRestInput(restSecs) {
+        const secs = parseFloat(restSecs) || 0;
+        if (secs <= 0) return '';
+        if (secs % 60 === 0) return String(secs / 60);
+        return formatTimeLength(secs);
+    }
     
     function formatTimeLength(secs, showMs = false) {
         if(!secs || isNaN(secs) || secs === Infinity) return "00:00";
@@ -1225,6 +1328,142 @@
         return el ? el.value : null;
     }
 
+    function setSessionEditState(session) {
+        const stateRow = document.getElementById('log-edit-state');
+        const stateText = document.getElementById('log-edit-state-text');
+        const saveBtn = document.getElementById('save-session-btn');
+        if (!stateRow || !stateText || !saveBtn) return;
+        if (session) {
+            editingSessionId = sessionIdValue(session);
+            stateText.textContent = `Editing: ${session.title || 'Training Session'} (${session.date || '--'})`;
+            stateRow.style.display = 'flex';
+            saveBtn.textContent = 'Update Session';
+        } else {
+            editingSessionId = null;
+            stateRow.style.display = 'none';
+            saveBtn.textContent = 'Save Session';
+        }
+    }
+
+    function recomputePersonalBestsFromSessions() {
+        const preservedTrack = {};
+        const existingTrack = appState.personalBests?.track || {};
+        Object.keys(existingTrack).forEach((k) => {
+            if (!existingTrack[k]) preservedTrack[k] = null;
+        });
+
+        appState.personalBests = { track: preservedTrack, gym: {} };
+        appState.sessions.forEach((s) => {
+            s.hasPB = false;
+            s.pbDetails = [];
+        });
+
+        const ordered = [...appState.sessions].sort((a, b) => {
+            const dCmp = (a.date || '').localeCompare(b.date || '');
+            if (dCmp !== 0) return dCmp;
+            return (a.time || '').localeCompare(b.time || '');
+        });
+        ordered.forEach((s) => checkAndUpdatePBs(s));
+        localStorage.setItem('omegahrv_pbs', JSON.stringify(appState.personalBests));
+        localStorage.setItem('omegahrv_sessions', JSON.stringify(appState.sessions));
+    }
+
+    function switchToLogTab() {
+        const logNav = qsa('.nav-item').find((n) => (n.getAttribute('onclick') || '').includes("switchTab('log'"));
+        switchTab('log', logNav || document.querySelector('.nav-item.active'));
+    }
+
+    function startSessionEdit(sessionId) {
+        const target = appState.sessions.find((s) => sessionIdValue(s) === sessionId);
+        if (!target) {
+            showToast('Session not found.', 'warning');
+            return;
+        }
+        switchToLogTab();
+        resetLogForm();
+
+        document.getElementById('log-date').value = target.date || '';
+        document.getElementById('log-time').value = target.time || '12:00';
+        document.getElementById('log-title').value = target.title || '';
+        document.getElementById('log-rpe').value = String(target.rpe || 5);
+        document.getElementById('log-rpe-val').value = String(target.rpe || 5);
+        document.getElementById('log-notes').value = target.notes || '';
+
+        const type = target.type || 'other';
+        const typeRadio = document.querySelector(`input[name="log-type"][value="${type}"]`);
+        if (typeRadio) typeRadio.checked = true;
+        toggleLogType(type);
+
+        if (type === 'running') {
+            const tbody = qs('#run-splits-table tbody');
+            tbody.innerHTML = '';
+            const splits = Array.isArray(target.running?.splits) ? target.running.splits : [];
+            splits.forEach((split) => {
+                addRunSplit();
+                const rows = qsa('#run-splits-table tbody tr.split-data-row');
+                const tr = rows[rows.length - 1];
+                const kinTr = tr?.nextElementSibling;
+                if (!tr) return;
+                tr.querySelector('.split-lbl').value = split.label || '';
+                tr.querySelector('.split-dist').value = split.distance || '';
+                tr.querySelector('.split-time').value = split.time ? formatTimeLength(split.time) : '';
+                tr.querySelector('.split-rest').value = formatRestInput(split.rest);
+                if (kinTr && kinTr.classList.contains('split-kin-row') && split.kinematics) {
+                    kinTr.querySelector('.kin-gct').value = split.kinematics.gct || '';
+                    kinTr.querySelector('.kin-ft').value = split.kinematics.ft || '';
+                    kinTr.querySelector('.kin-sl').value = split.kinematics.sl || '';
+                    kinTr.querySelector('.kin-sf').value = split.kinematics.sf || '';
+                    kinTr.querySelector('.kin-vo').value = split.kinematics.vo || '';
+                }
+            });
+            recalcRunTotals();
+        } else if (type === 'weightlifting') {
+            document.getElementById('lift-duration').value = target.lifting?.duration || '';
+            const mods = new Set(Array.isArray(target.lifting?.modalities) ? target.lifting.modalities : []);
+            qsa('#lift-modalities .chip').forEach((chip) => chip.classList.toggle('active', mods.has(chip.innerText)));
+            const container = document.getElementById('lift-exercises-container');
+            container.innerHTML = '';
+            const exercises = Array.isArray(target.lifting?.exercises) ? target.lifting.exercises : [];
+            exercises.forEach((ex) => {
+                addLiftExercise();
+                const cards = qsa('.lift-ex-card');
+                const card = cards[cards.length - 1];
+                if (!card) return;
+                card.querySelector('.ex-name').value = ex.name || '';
+                const rows = card.querySelectorAll('tbody tr');
+                if (Array.isArray(ex.sets) && ex.sets.length > 0) {
+                    if (rows[0]) {
+                        rows[0].querySelector('.set-reps').value = ex.sets[0].reps || '';
+                        rows[0].querySelector('.set-load').value = ex.sets[0].load || '';
+                        rows[0].querySelector('.set-type').value = ex.sets[0].type || 'working';
+                        rows[0].querySelector('.set-peak').value = ex.sets[0].peakPower || '';
+                    }
+                    for (let i = 1; i < ex.sets.length; i++) {
+                        addExSet(card.querySelector('button:last-child'));
+                        const lastRows = card.querySelectorAll('tbody tr');
+                        const row = lastRows[lastRows.length - 1];
+                        row.querySelector('.set-reps').value = ex.sets[i].reps || '';
+                        row.querySelector('.set-load').value = ex.sets[i].load || '';
+                        row.querySelector('.set-type').value = ex.sets[i].type || 'working';
+                        row.querySelector('.set-peak').value = ex.sets[i].peakPower || '';
+                    }
+                }
+            });
+        } else {
+            document.getElementById('other-activity').value = target.other?.activity || '';
+            document.getElementById('other-duration').value = target.other?.duration || '';
+        }
+
+        checkLogReadiness();
+        setSessionEditState(target);
+    }
+
+    window.cancelSessionEdit = function() {
+        setSessionEditState(null);
+        resetLogForm();
+        checkLogReadiness();
+    };
+
     function saveSession() {
         let type = getSelectedRadio('log-type');
         let title = document.getElementById('log-title').value.trim() || 'Training Session';
@@ -1234,7 +1473,7 @@
         let exactMatch = appState.measurements.find(m => m.date.startsWith(date));
 
         let sess = {
-            id: crypto.randomUUID(),
+            id: editingSessionId || crypto.randomUUID(),
             date: date,
             time: document.getElementById('log-time').value,
             title: title,
@@ -1264,7 +1503,7 @@
                     label: tr.querySelector('.split-lbl').value,
                     distance: parseFloat(tr.querySelector('.split-dist').value) || 0,
                     time: parseTime(tr.querySelector('.split-time').value),
-                    rest: parseTime(tr.querySelector('.split-rest').value) || 0,
+                    rest: parseRestSeconds(tr.querySelector('.split-rest').value) || 0,
                     kinematics: kin
                 };
             }).filter(s => s.distance > 0 && s.time > 0);
@@ -1301,23 +1540,38 @@
             sess.other = { activity: document.getElementById('other-activity').value, duration: document.getElementById('other-duration').value };
         }
 
-        checkAndUpdatePBs(sess);
-
-        appState.sessions.unshift(sess);
+        if (editingSessionId) {
+            const idx = appState.sessions.findIndex((s) => sessionIdValue(s) === editingSessionId);
+            if (idx >= 0) appState.sessions[idx] = sess;
+            else appState.sessions.unshift(sess);
+        } else {
+            appState.sessions.unshift(sess);
+        }
         appState.sessions.sort((a,b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
-        
-        localStorage.setItem('omegahrv_sessions', JSON.stringify(appState.sessions));
+
+        recomputePersonalBestsFromSessions();
         pushSession(sess); // sync to cloud
-        if(sess.hasPB) pushProfile(); // PBs updated, sync profile too
+        pushProfile();
         
         if(sess.hasPB) {
             confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, zIndex: 1000 });
         }
         
+        const wasEditing = !!editingSessionId;
+        setSessionEditState(null);
         resetLogForm();
         renderSessionList();
         renderLogSparkline();
-        showToast(sess.hasPB ? `Session saved! ${sess.pbDetails.join(', ')}` : "Session saved.", 'success');
+        renderPBsGym();
+        renderPBsTrack();
+        renderHistory();
+        if(typeof currentCalYear !== 'undefined') renderCalendar(currentCalYear, currentCalMonth);
+        showToast(
+            sess.hasPB
+                ? `${wasEditing ? 'Session updated!' : 'Session saved!'} ${sess.pbDetails.join(', ')}`
+                : (wasEditing ? 'Session updated.' : 'Session saved.'),
+            'success'
+        );
     }
 
     function resetLogForm() {
@@ -1462,15 +1716,19 @@
         const confirmed = await showConfirm("Delete this session forever?", { title: 'Delete session', confirmText: 'Delete' });
         if(confirmed) {
             appState.sessions = appState.sessions.filter(s => sessionIdValue(s) !== id);
-            localStorage.setItem('omegahrv_sessions', JSON.stringify(appState.sessions));
+            recomputePersonalBestsFromSessions();
             if (currentUser) {
                 try {
                     const query = sbClient.from('sessions');
                     if (query.delete) await query.delete().eq('user_id', currentUser.id).eq('id', id);
                 } catch(e) { console.warn('Cloud session delete failed', e); }
             }
+            if (editingSessionId === id) setSessionEditState(null);
             renderSessionList();
             renderPBsGym(); renderPBsTrack();
+            renderHistory();
+            if(typeof currentCalYear !== 'undefined') renderCalendar(currentCalYear, currentCalMonth);
+            pushProfile();
             showToast('Session deleted.', 'success');
         }
     };
@@ -1711,6 +1969,18 @@
                 span.textContent = `RPE ${s.rpe || '--'}/10 | ${s.time || '--'}`;
                 row.appendChild(st);
                 row.appendChild(span);
+
+                const actions = document.createElement('div');
+                actions.style.marginTop = '6px';
+                const editBtn = document.createElement('button');
+                editBtn.style.width = 'auto';
+                editBtn.style.minHeight = 'unset';
+                editBtn.style.padding = '4px 10px';
+                editBtn.style.fontSize = '0.75rem';
+                editBtn.textContent = 'Edit session';
+                editBtn.dataset.sessionEditId = sessionIdValue(s);
+                actions.appendChild(editBtn);
+                row.appendChild(actions);
                 
                 const det = document.createElement('div');
                 det.style.marginTop = '4px';
@@ -1737,6 +2007,18 @@
                     notesEl.style.color = 'var(--text-muted)';
                     notesEl.textContent = `"${s.notes}"`;
                     det.appendChild(notesEl);
+                }
+
+                if (s.hasPB && Array.isArray(s.pbDetails) && s.pbDetails.length > 0) {
+                    const pbWrap = document.createElement('div');
+                    pbWrap.style.marginTop = '6px';
+                    s.pbDetails.forEach((pbTxt) => {
+                        const pill = document.createElement('span');
+                        pill.className = 'pb-pill';
+                        pill.textContent = pbTxt;
+                        pbWrap.appendChild(pill);
+                    });
+                    det.appendChild(pbWrap);
                 }
                 
                 row.appendChild(det);
