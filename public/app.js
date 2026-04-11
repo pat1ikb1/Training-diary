@@ -219,6 +219,7 @@
         setSyncStatus('syncing', 'Syncing...');
         try {
             await syncDown();
+            if(typeof currentCalYear !== 'undefined') renderCalendar(currentCalYear, currentCalMonth);
             setSyncStatus('synced', 'Synced');
         } catch(e) {
             console.error('Sync down failed:', e);
@@ -416,6 +417,7 @@
             // Then pull to reconcile
             await syncDown();
             initApp();
+            if(typeof currentCalYear !== 'undefined') renderCalendar(currentCalYear, currentCalMonth);
             setSyncStatus('synced', 'Synced');
             showToast('Cloud sync complete.', 'success');
         } catch(e) {
@@ -1616,7 +1618,11 @@
             } else {
                 el.setAttribute('aria-label', `${dateStr}: no data`);
             }
-            el.onclick = () => openDayModal(dateStr, om, sesss);
+            el.onclick = () => {
+                const liveMeas = appState.measurements.find(m => m.date.startsWith(dateStr));
+                const liveSess = appState.sessions.filter(s => s.date === dateStr);
+                openDayModal(dateStr, liveMeas, liveSess);
+            };
             c.appendChild(el);
         }
         
@@ -1705,10 +1711,16 @@
                 det.style.marginTop = '4px';
                 det.style.fontSize = '0.8rem';
                 if(s.type === 'running' && typeof s.running === 'object' && s.running !== null) {
-                    det.textContent = `Dist: ${s.running.distance || 0}m | Dur: ${s.running.time || '00:00'}${Array.isArray(s.running.splits) ? ` | ${s.running.splits.length} splits` : ''}`;
-                } else if (s.type === 'weightlifting' && Array.isArray(s.lifting)) {
-                    const lNames = s.lifting.map(l => `${l.name} (${Array.isArray(l.sets) ? l.sets.length : 0} sets)`).join(', ');
-                    det.textContent = lNames ? lNames : 'No exercises logged';
+                    const distDisplay = s.running.totalDistance >= 1000
+                        ? (s.running.totalDistance / 1000).toFixed(2) + ' km'
+                        : (s.running.totalDistance || 0) + ' m';
+                    const durDisplay = formatTimeLength(s.running.totalTime || 0);
+                    det.textContent = `Dist: ${distDisplay} | Dur: ${durDisplay}${Array.isArray(s.running.splits) ? ` | ${s.running.splits.length} splits` : ''}`;
+                } else if (s.type === 'weightlifting' && s.lifting && Array.isArray(s.lifting.exercises)) {
+                    const lNames = s.lifting.exercises.map(l =>
+                        `${l.name} (${Array.isArray(l.sets) ? l.sets.length : 0} sets)`
+                    ).join(', ');
+                    det.textContent = lNames || 'No exercises logged';
                 } else if (s.other && typeof s.other === 'object') {
                     det.textContent = `Activity: ${s.other.activity || 'Unknown'} | Dur: ${s.other.duration || '00:00'}`;
                 }
