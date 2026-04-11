@@ -1630,7 +1630,18 @@
 
     function openDayModal(date, om, sessions) {
         let container = document.getElementById('calendar-day-details');
-        if (!container) return;
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'calendar-day-details';
+            container.style.display = 'flex';
+            container.style.flexDirection = 'column';
+            container.style.gap = '15px';
+            container.style.marginTop = '15px';
+            container.style.paddingBottom = '20px';
+            const tv = document.getElementById('view-calendar');
+            if(tv) tv.appendChild(container);
+            else return;
+        }
         container.innerHTML = '';
         container.style.display = 'flex';
 
@@ -1680,24 +1691,24 @@
                 row.style.marginBottom = '10px';
                 row.style.fontSize = '0.85rem';
                 
-                const st = document.createElement('strong');
-                st.textContent = s.title || (s.type.charAt(0).toUpperCase() + s.type.slice(1) + ' Session');
+                let typeStr = (typeof s.type === 'string' && s.type.length > 0) ? s.type : 'Training';
+                st.textContent = s.title || (typeStr.charAt(0).toUpperCase() + typeStr.slice(1) + ' Session');
                 
                 const span = document.createElement('div');
                 span.style.color = 'var(--text-muted)';
-                span.textContent = `RPE ${s.rpe}/10 | ${s.time}`;
+                span.textContent = `RPE ${s.rpe || '--'}/10 | ${s.time || '--'}`;
                 row.appendChild(st);
                 row.appendChild(span);
                 
                 const det = document.createElement('div');
                 det.style.marginTop = '4px';
                 det.style.fontSize = '0.8rem';
-                if(s.type === 'running' && s.running) {
-                    det.textContent = `Dist: ${s.running.distance}m | Dur: ${s.running.time}${s.running.splits ? ` | ${s.running.splits.length} splits` : ''}`;
-                } else if (s.type === 'weightlifting' && s.lifting) {
-                    const lNames = s.lifting.map(l => `${l.name} (${l.sets.length} sets)`).join(', ');
+                if(s.type === 'running' && typeof s.running === 'object' && s.running !== null) {
+                    det.textContent = `Dist: ${s.running.distance || 0}m | Dur: ${s.running.time || '00:00'}${Array.isArray(s.running.splits) ? ` | ${s.running.splits.length} splits` : ''}`;
+                } else if (s.type === 'weightlifting' && Array.isArray(s.lifting)) {
+                    const lNames = s.lifting.map(l => `${l.name} (${Array.isArray(l.sets) ? l.sets.length : 0} sets)`).join(', ');
                     det.textContent = lNames ? lNames : 'No exercises logged';
-                } else if (s.other) {
+                } else if (s.other && typeof s.other === 'object') {
                     det.textContent = `Activity: ${s.other.activity || 'Unknown'} | Dur: ${s.other.duration || '00:00'}`;
                 }
                 
