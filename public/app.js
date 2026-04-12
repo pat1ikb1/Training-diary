@@ -27,13 +27,34 @@
     }
     let currentUser = null;
 
+    function safeLocalGet(key, fallback) {
+        try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }
+        catch(e) { return fallback; }
+    }
+
+    function safeLocalSet(key, value) {
+        try { localStorage.setItem(key, JSON.stringify(value)); } catch(e) {}
+    }
+
+    function safeLocalGetRaw(key, fallback) {
+        try { return localStorage.getItem(key) ?? fallback; } catch(e) { return fallback; }
+    }
+
+    function safeLocalSetRaw(key, value) {
+        try { localStorage.setItem(key, value); } catch(e) {}
+    }
+
+    function safeLocalRemove(key) {
+        try { localStorage.removeItem(key); } catch(e) {}
+    }
+
     // --- STATE ---
     let appState = {
-        measurements: JSON.parse(localStorage.getItem('omegahrv_measurements')) || [],
-        settings: JSON.parse(localStorage.getItem('omegahrv_settings')) || { name: '', age: '', initDuration: '60', duration: '180', lightMode: false },
-        onboarded: localStorage.getItem('omegahrv_onboarded') === 'true',
-        sessions: JSON.parse(localStorage.getItem('omegahrv_sessions')) || [],
-        personalBests: JSON.parse(localStorage.getItem('omegahrv_pbs')) || { track: {}, gym: {} }
+        measurements: safeLocalGet('omegahrv_measurements', []),
+        settings: safeLocalGet('omegahrv_settings', { name: '', age: '', initDuration: '60', duration: '180', lightMode: false }),
+        onboarded: safeLocalGetRaw('omegahrv_onboarded', 'false') === 'true',
+        sessions: safeLocalGet('omegahrv_sessions', []),
+        personalBests: safeLocalGet('omegahrv_pbs', { track: {}, gym: {} })
     };
 
     const qs = (sel, ctx=document) => ctx.querySelector(sel);
@@ -287,7 +308,7 @@
                 updatedAt: m.updated_at || m.date
             }));
             appState.measurements = mergeByLatest(appState.measurements, cloudMeasurements, 'measurement').sort(compareMeasurementDateAsc);
-            localStorage.setItem('omegahrv_measurements', JSON.stringify(appState.measurements));
+            safeLocalSet('omegahrv_measurements', appState.measurements);
         }
 
         // 2. Pull sessions
@@ -309,7 +330,7 @@
                 updatedAt: s.updated_at || `${s.date}T${s.time || '00:00'}:00Z`
             }));
             appState.sessions = mergeByLatest(appState.sessions, cloudSessions, 'session').sort(compareSessionDateTimeDesc);
-            localStorage.setItem('omegahrv_sessions', JSON.stringify(appState.sessions));
+            safeLocalSet('omegahrv_sessions', appState.sessions);
         }
 
         // 3. Pull profile (settings + PBs)
@@ -317,13 +338,13 @@
         if(prof) {
             if(prof.settings) {
                 appState.settings = prof.settings;
-                localStorage.setItem('omegahrv_settings', JSON.stringify(appState.settings));
+                safeLocalSet('omegahrv_settings', appState.settings);
                 appState.onboarded = true;
-                localStorage.setItem('omegahrv_onboarded', 'true');
+                safeLocalSetRaw('omegahrv_onboarded', 'true');
             }
             if(prof.personal_bests) {
                 appState.personalBests = prof.personal_bests;
-                localStorage.setItem('omegahrv_pbs', JSON.stringify(appState.personalBests));
+                safeLocalSet('omegahrv_pbs', appState.personalBests);
             }
         }
     }
@@ -449,7 +470,11 @@
         // Check existing Supabase session
         let hasSession = false;
         try {
-            const { data, error } = await sbClient.auth.getSession();
+            const sessionResult = await Promise.race([
+                sbClient.auth.getSession(),
+                new Promise(resolve => setTimeout(() => resolve({ data: null, error: new Error('timeout') }), 5000))
+            ]);
+            const { data, error } = sessionResult;
             if(!error && data?.session?.user) {
                 currentUser = data.session.user;
                 hasSession = true;
@@ -539,8 +564,8 @@
         appState.settings.age = document.getElementById('onb-age').value || '30';
         appState.settings.initDuration = '60';
         appState.settings.duration = '180';
-        localStorage.setItem('omegahrv_settings', JSON.stringify(appState.settings));
-        localStorage.setItem('omegahrv_onboarded', 'true');
+        safeLocalSet('omegahrv_settings', appState.settings);
+        safeLocalSetRaw('omegahrv_onboarded', 'true');
         appState.onboarded = true;
         document.getElementById('modal-onboard').classList.remove('active');
         pushProfile(); // sync to cloud
@@ -616,7 +641,7 @@
         appState.settings.duration = (!isNaN(dur) && dur >= 30) ? String(dur) : '180';
         
         appState.settings.lightMode = document.getElementById('set-theme').checked;
-        localStorage.setItem('omegahrv_settings', JSON.stringify(appState.settings));
+        safeLocalSet('omegahrv_settings', appState.settings);
         pushProfile(); // sync to cloud
         showToast("Settings saved!", 'success');
     }
@@ -1149,7 +1174,7 @@
         bleState.lastResult.id = crypto.randomUUID();
         bleState.lastResult.updatedAt = new Date().toISOString();
         appState.measurements.push(bleState.lastResult);
-        localStorage.setItem('omegahrv_measurements', JSON.stringify(appState.measurements));
+        safeLocalSet('omegahrv_measurements', appState.measurements);
         pushMeasurement(bleState.lastResult); // sync to cloud
         
         // Return to dashboard
@@ -1188,7 +1213,7 @@
         const confirmed = await showConfirm("Are you sure you want to delete all historical measurements? This cannot be undone.", { title: 'Clear data', confirmText: 'Delete all' });
         if(confirmed) {
             appState.measurements = [];
-            localStorage.removeItem('omegahrv_measurements');
+            safeLocalRemove('omegahrv_measurements');
             initApp();
             showToast("Data cleared.", 'success');
         }
@@ -1557,8 +1582,8 @@
             return (a.time || '').localeCompare(b.time || '');
         });
         ordered.forEach((s) => checkAndUpdatePBs(s));
-        localStorage.setItem('omegahrv_pbs', JSON.stringify(appState.personalBests));
-        localStorage.setItem('omegahrv_sessions', JSON.stringify(appState.sessions));
+        safeLocalSet('omegahrv_pbs', appState.personalBests);
+        safeLocalSet('omegahrv_sessions', appState.sessions);
     }
 
     function switchToLogTab() {
@@ -1826,7 +1851,7 @@
             });
         }
         
-        if(sess.hasPB) localStorage.setItem('omegahrv_pbs', JSON.stringify(appState.personalBests));
+        if(sess.hasPB) safeLocalSet('omegahrv_pbs', appState.personalBests);
     }
 
     // --- RENDERING VIEWS ---
@@ -1923,7 +1948,7 @@
         const confirmed = await showConfirm('Delete this measurement?', { title: 'Delete measurement', confirmText: 'Delete' });
         if (!confirmed) return;
         appState.measurements = appState.measurements.filter(m => fallbackMeasurementId(m) !== id);
-        localStorage.setItem('omegahrv_measurements', JSON.stringify(appState.measurements));
+        safeLocalSet('omegahrv_measurements', appState.measurements);
         if (currentUser) {
             try {
                 const query = sbClient.from('measurements');
@@ -1958,7 +1983,7 @@
             date: nextDate || current.date || '',
             speed: Number.isFinite(parsedDist) && parsedDist > 0 ? parsedDist / nextTime : (current.speed || null)
         };
-        localStorage.setItem('omegahrv_pbs', JSON.stringify(appState.personalBests));
+        safeLocalSet('omegahrv_pbs', appState.personalBests);
         renderPBsTrack();
         pushProfile();
         showToast('Track PR updated.', 'success');
@@ -1981,7 +2006,7 @@
             reps,
             date: nextDate || current.date || ''
         };
-        localStorage.setItem('omegahrv_pbs', JSON.stringify(appState.personalBests));
+        safeLocalSet('omegahrv_pbs', appState.personalBests);
         renderPBsGym();
         pushProfile();
         showToast('Gym PR updated.', 'success');
@@ -1993,7 +2018,7 @@
         const confirmed = await showConfirm(`Remove PR for ${distanceKey}?`, { title: 'Remove track PR', confirmText: 'Remove' });
         if (!confirmed) return;
         delete appState.personalBests.track[distanceKey];
-        localStorage.setItem('omegahrv_pbs', JSON.stringify(appState.personalBests));
+        safeLocalSet('omegahrv_pbs', appState.personalBests);
         renderPBsTrack();
         pushProfile();
         showToast('Track PR removed.', 'success');
@@ -2005,7 +2030,7 @@
         const confirmed = await showConfirm(`Remove PR for ${exerciseKey}?`, { title: 'Remove gym PR', confirmText: 'Remove' });
         if (!confirmed) return;
         delete appState.personalBests.gym[exerciseKey];
-        localStorage.setItem('omegahrv_pbs', JSON.stringify(appState.personalBests));
+        safeLocalSet('omegahrv_pbs', appState.personalBests);
         renderPBsGym();
         pushProfile();
         showToast('Gym PR removed.', 'success');
@@ -2117,6 +2142,7 @@
     };
 
     function renderCalendar(year, month) {
+        if (!currentUser) return;
         currentCalYear = year; currentCalMonth = month;
         let c = document.getElementById('calendar-days');
         c.innerHTML = '';
@@ -3738,8 +3764,18 @@
     }
 
     function renderAnalytics() {
-        const view = document.getElementById('view-analytics');
+        const view = document.getElementById('analytics-content');
         if (!view) return;
+        if (!currentUser) {
+            document.getElementById('analytics-content').innerHTML =
+                '<p>Sign in to see analytics.</p>';
+            return;
+        }
+        if (appState.sessions.length === 0 && appState.measurements.length === 0) {
+            document.getElementById('analytics-content').innerHTML =
+                '<p>No data yet. Log a session or measurement to get started.</p>';
+            return;
+        }
         Chart.defaults.color = analyticsCss('--text-muted');
         Chart.defaults.borderColor = analyticsCss('--border');
         Chart.defaults.font.family = 'Inter';
