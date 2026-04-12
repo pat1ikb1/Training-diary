@@ -3767,13 +3767,11 @@
         const view = document.getElementById('analytics-content');
         if (!view) return;
         if (!currentUser) {
-            document.getElementById('analytics-content').innerHTML =
-                '<p>Sign in to see analytics.</p>';
+            view.innerHTML = '<p>Sign in to see analytics.</p>';
             return;
         }
         if (appState.sessions.length === 0 && appState.measurements.length === 0) {
-            document.getElementById('analytics-content').innerHTML =
-                '<p>No data yet. Log a session or measurement to get started.</p>';
+            view.innerHTML = '<p>No data yet. Log a session or measurement to get started.</p>';
             return;
         }
         Chart.defaults.color = analyticsCss('--text-muted');
