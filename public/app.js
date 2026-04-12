@@ -225,7 +225,6 @@
         setSyncStatus('syncing', 'Syncing...');
         try {
             await syncDown();
-            if(typeof currentCalYear !== 'undefined') renderCalendar(currentCalYear, currentCalMonth);
             setSyncStatus('synced', 'Synced');
         } catch(e) {
             console.error('Sync down failed:', e);
@@ -236,6 +235,7 @@
             document.getElementById('modal-onboard').classList.add('active');
         } else {
             initApp();
+            renderActiveView();
         }
         applySettingsToUI();
     }
@@ -430,7 +430,7 @@
             // Then pull to reconcile
             await syncDown();
             initApp();
-            if(typeof currentCalYear !== 'undefined') renderCalendar(currentCalYear, currentCalMonth);
+            renderActiveView();
             setSyncStatus('synced', 'Synced');
             showToast('Cloud sync complete.', 'success');
         } catch(e) {
@@ -520,6 +520,18 @@
         renderHistory();
         Chart.defaults.color = getComputedStyle(document.body).getPropertyValue('--text-muted').trim();
         Chart.defaults.font.family = 'Inter';
+    }
+
+    function renderActiveView() {
+        const activeView = document.querySelector('.view.active');
+        if (!activeView) return;
+        const id = activeView.id;
+        if (id === 'view-dashboard') renderDashboard();
+        else if (id === 'view-history') renderHistory();
+        else if (id === 'view-calendar') renderCalendar(currentCalYear, currentCalMonth);
+        else if (id === 'view-analytics') renderAnalytics();
+        else if (id === 'view-prs') { renderPBsTrack(); renderPBsGym(); }
+        else if (id === 'view-log') { renderSessionList(); renderLogSparkline(); }
     }
 
     function completeOnboarding() {
