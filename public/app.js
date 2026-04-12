@@ -258,6 +258,16 @@
         return [...merged.values()];
     }
 
+    function compareMeasurementDateAsc(a, b) {
+        return (normalizeDate(a?.date) || '').localeCompare(normalizeDate(b?.date) || '');
+    }
+
+    function compareSessionDateTimeDesc(a, b) {
+        const dateCmp = (normalizeDate(b?.date) || '').localeCompare(normalizeDate(a?.date) || '');
+        if (dateCmp !== 0) return dateCmp;
+        return String(b?.time || '').localeCompare(String(a?.time || ''));
+    }
+
     async function syncDown() {
         if(!currentUser) return;
 
@@ -276,7 +286,7 @@
                 rrCount: m.rr_count,
                 updatedAt: m.updated_at || m.date
             }));
-            appState.measurements = mergeByLatest(appState.measurements, cloudMeasurements, 'measurement').sort((a,b) => a.date.localeCompare(b.date));
+            appState.measurements = mergeByLatest(appState.measurements, cloudMeasurements, 'measurement').sort(compareMeasurementDateAsc);
             localStorage.setItem('omegahrv_measurements', JSON.stringify(appState.measurements));
         }
 
@@ -298,7 +308,7 @@
                 other: s.other_data,
                 updatedAt: s.updated_at || `${s.date}T${s.time || '00:00'}:00Z`
             }));
-            appState.sessions = mergeByLatest(appState.sessions, cloudSessions, 'session').sort((a,b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
+            appState.sessions = mergeByLatest(appState.sessions, cloudSessions, 'session').sort(compareSessionDateTimeDesc);
             localStorage.setItem('omegahrv_sessions', JSON.stringify(appState.sessions));
         }
 
@@ -1716,7 +1726,7 @@
         } else {
             appState.sessions.unshift(sess);
         }
-        appState.sessions.sort((a,b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
+        appState.sessions.sort(compareSessionDateTimeDesc);
 
         recomputePersonalBestsFromSessions();
         pushSession(sess); // sync to cloud
