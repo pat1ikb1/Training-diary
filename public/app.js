@@ -210,10 +210,24 @@
     async function syncPendingLocalDataAfterLogin() {
         if (!currentUser) return;
 
-        const [{ data: measRows = [] }, { data: sessRows = [] }] = await Promise.all([
-            sbClient.from('measurements').select('id').eq('user_id', currentUser.id),
-            sbClient.from('sessions').select('id').eq('user_id', currentUser.id)
-        ]);
+        let measRows = [];
+        let sessRows = [];
+        try {
+            const [{ data: fetchedMeasRows = [], error: measError }, { data: fetchedSessRows = [], error: sessError }] = await Promise.all([
+                sbClient.from('measurements').select('id').eq('user_id', currentUser.id),
+                sbClient.from('sessions').select('id').eq('user_id', currentUser.id)
+            ]);
+            if (measError || sessError) {
+                if (measError) console.error('Failed to read cloud measurement IDs before sync upload:', measError);
+                if (sessError) console.error('Failed to read cloud session IDs before sync upload:', sessError);
+                return;
+            }
+            measRows = fetchedMeasRows;
+            sessRows = fetchedSessRows;
+        } catch (error) {
+            console.error('Failed to read cloud IDs before sync upload:', error);
+            return;
+        }
 
         const cloudMeasurementIds = new Set(measRows.map((row) => row.id));
         const cloudSessionIds = new Set(sessRows.map((row) => row.id));
@@ -384,7 +398,10 @@
                 rrCount: m.rr_count,
                 updatedAt: m.updated_at || m.date
             }));
-            appState.measurements = mergeByLatest(appState.measurements, cloudMeasurements, 'measurement').sort(compareMeasurementDateAsc);
+            appState.measurements = cloudMeasurements.length > appState.measurements.length
+                ? cloudMeasurements
+                : mergeByLatest(appState.measurements, cloudMeasurements, 'measurement');
+            appState.measurements = appState.measurements.sort(compareMeasurementDateAsc);
             localStorage.setItem('omegahrv_measurements', JSON.stringify(appState.measurements));
         }
 
@@ -406,13 +423,16 @@
                 other: s.other_data,
                 updatedAt: s.updated_at || `${s.date}T${s.time || '00:00'}:00Z`
             }));
-            appState.sessions = mergeByLatest(appState.sessions, cloudSessions, 'session').sort(compareSessionDateTimeDesc);
+            appState.sessions = cloudSessions.length > appState.sessions.length
+                ? cloudSessions
+                : mergeByLatest(appState.sessions, cloudSessions, 'session');
+            appState.sessions = appState.sessions.sort(compareSessionDateTimeDesc);
             localStorage.setItem('omegahrv_sessions', JSON.stringify(appState.sessions));
         }
 
         let { data: prof } = await sbClient.from('profiles').select('*').eq('user_id', currentUser.id).single();
         if(prof) {
-            if(prof.settings) {
+            if(prof.settings !== null && prof.settings !== undefined) {
                 appState.settings = prof.settings;
                 localStorage.setItem('omegahrv_settings', JSON.stringify(appState.settings));
                 appState.onboarded = true;
@@ -488,7 +508,7 @@
                 settings: appState.settings,
                 personal_bests: appState.personalBests,
                 updated_at: new Date().toISOString()
-            });
+            }, { onConflict: 'user_id' });
             setSyncStatus('synced', 'Synced');
         } catch(e) { console.error(e); setSyncStatus('error', 'Sync error'); }
     }
@@ -512,7 +532,7 @@
                     stress_index: m.stressIndex,
                     rr_count: m.rrCount,
                     updated_at: m.updatedAt || new Date().toISOString()
-                })));
+                })), { onConflict: 'id' });
             }
             if (appState.sessions.length) {
                 await sbClient.from('sessions').upsert(appState.sessions.map(s => ({
@@ -530,7 +550,7 @@
                     lifting_data: s.lifting || null,
                     other_data: s.other || null,
                     updated_at: s.updatedAt || new Date().toISOString()
-                })));
+                })), { onConflict: 'id' });
             }
             // Then pull to reconcile
             await runSyncDown();
@@ -550,6 +570,7 @@
         updateLastSyncedLabel();
         setInterval(updateLastSyncedLabel, MINUTE_IN_MS);
         document.addEventListener('visibilitychange', handleVisibilitySync);
+        window.addEventListener('focus', handleVisibilitySync);
 
         if (!navigator.bluetooth) {
             document.getElementById('ble-unsupported').style.display = 'block';
