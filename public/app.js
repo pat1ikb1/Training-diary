@@ -2542,8 +2542,9 @@
                             
                         } else if (s.other && typeof s.other === 'object') {
                             let otherBlock = document.createElement('div');
+                            const otherDuration = formatTimeLength(parseTime(s.other.duration));
                             renderIfPresent(otherBlock, 'Activity', s.other.activity || 'Unknown');
-                            renderIfPresent(otherBlock, 'Duration', s.other.duration || '00:00');
+                            renderIfPresent(otherBlock, 'Duration', otherDuration);
                             det.appendChild(otherBlock);
                         }
                         
@@ -3843,6 +3844,72 @@
         }
     }
 
+    function renderMonthlyFallback() {
+        const host = document.getElementById('analytics-monthly-content');
+        if (!host) return;
+
+        const anchor = new Date();
+        const selectedMonth = new Date(anchor.getFullYear(), anchor.getMonth() + (analyticsState.monthOffset || 0), 1);
+        const months = Array.from({ length: 6 }, (_, idx) => {
+            const shift = 5 - idx;
+            return new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() - shift, 1);
+        });
+
+        const labels = months.map((d) => d.toLocaleString(undefined, { month: 'short', year: '2-digit' }));
+        const counts = months.map((d) => {
+            const y = d.getFullYear();
+            const m = d.getMonth();
+            return (appState.sessions || []).filter((s) => {
+                const date = new Date(s?.date || 0);
+                return date.getFullYear() === y && date.getMonth() === m;
+            }).length;
+        });
+        const loads = months.map((d) => {
+            const y = d.getFullYear();
+            const m = d.getMonth();
+            return (appState.sessions || []).reduce((sum, s) => {
+                const date = new Date(s?.date || 0);
+                if (date.getFullYear() !== y || date.getMonth() !== m) return sum;
+                return sum + getSessionLoadUnits(s);
+            }, 0);
+        });
+
+        host.innerHTML = `
+            <div class="analytics-grid">
+                <div class="card">
+                    ${sectionTitle('Monthly Volume / Load Summary (Last 6 Months)')}
+                    <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:10px; font-size:0.85rem;">
+                        <div><strong>Total Sessions:</strong> ${counts.reduce((a, b) => a + b, 0)}</div>
+                        <div><strong>Total Load Units:</strong> ${loads.reduce((a, b) => a + b, 0).toFixed(1)}</div>
+                    </div>
+                    ${chartCanvasBlock('analytics-monthly-fallback-count')}
+                </div>
+            </div>
+        `;
+
+        destroyAnalyticsChart('monthlyFallbackCount');
+        const ctx = document.getElementById('analytics-monthly-fallback-count');
+        if (ctx) {
+            analyticsCharts.monthlyFallbackCount = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'Sessions',
+                        data: counts,
+                        backgroundColor: analyticsCss('--accent')
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+                }
+            });
+        }
+    }
+
     function renderAnalytics() {
         const view = document.getElementById('view-analytics');
         if (!view) return;
@@ -3868,7 +3935,8 @@
         `;
         renderDailyView();
         renderWeeklyView();
-        renderMonthlyView();
+        if (typeof renderMonthlyView === 'function') renderMonthlyView();
+        else renderMonthlyFallback();
         ensureAccordionState();
     }
     window.renderAnalytics = renderAnalytics;
