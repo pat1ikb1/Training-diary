@@ -436,5 +436,7 @@
         .sync-indicator.synced { color: var(--success); }
         .sync-indicator.offline { color: var(--warning); }
         .sync-indicator.error { color: var(--danger); }
+        .sync-meta { display: flex; flex-direction: column; line-height: 1.1; gap: 1px; }
+        #sync-last { font-size: 0.65rem; color: var(--text-muted); }
         @keyframes spin { to { transform: rotate(360deg); } }
         .sync-indicator.syncing svg { animation: spin 1s linear infinite; }

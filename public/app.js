@@ -26,6 +26,10 @@
         };
     }
     let currentUser = null;
+    let lastSyncAt = Number(localStorage.getItem('omegahrv_last_synced_at')) || 0;
+    let lastVisibilitySyncAt = 0;
+    const VISIBILITY_SYNC_DEBOUNCE_MS = 30000;
+    let syncDownPromise = null;
 
     // --- STATE ---
     let appState = {
@@ -154,6 +158,81 @@
         el.style.display = 'flex';
         el.className = 'sync-indicator ' + state;
         document.getElementById('sync-label').textContent = label || state;
+        if (state === 'synced') {
+            lastSyncAt = Date.now();
+            localStorage.setItem('omegahrv_last_synced_at', String(lastSyncAt));
+        }
+        updateLastSyncedLabel();
+    }
+
+    function updateLastSyncedLabel() {
+        const syncLastEl = document.getElementById('sync-last');
+        if (!syncLastEl) return;
+        if (!lastSyncAt) {
+            syncLastEl.textContent = 'Last synced: never';
+            return;
+        }
+        const diffMs = Math.max(0, Date.now() - lastSyncAt);
+        const mins = Math.floor(diffMs / 60000);
+        syncLastEl.textContent = mins <= 0
+            ? 'Last synced: just now'
+            : `Last synced: ${mins} min${mins === 1 ? '' : 's'} ago`;
+    }
+
+    async function runSyncDown() {
+        if (!currentUser) return;
+        if (syncDownPromise) return syncDownPromise;
+        syncDownPromise = (async () => {
+            await syncDown();
+        })();
+        try {
+            await syncDownPromise;
+        } finally {
+            syncDownPromise = null;
+        }
+    }
+
+    async function syncPendingLocalDataAfterLogin() {
+        if (!currentUser) return;
+
+        const [{ data: measRows = [] }, { data: sessRows = [] }] = await Promise.all([
+            sbClient.from('measurements').select('id').eq('user_id', currentUser.id),
+            sbClient.from('sessions').select('id').eq('user_id', currentUser.id)
+        ]);
+
+        const cloudMeasurementIds = new Set(measRows.map((row) => row.id));
+        const cloudSessionIds = new Set(sessRows.map((row) => row.id));
+        let measurementsChanged = false;
+        let sessionsChanged = false;
+
+        for (const m of appState.measurements) {
+            const measurementId = fallbackMeasurementId(m);
+            const missingInCloud = !cloudMeasurementIds.has(measurementId);
+            const isPending = m._pendingSync === true;
+            if (!missingInCloud && !isPending) continue;
+            await pushMeasurement(m);
+            cloudMeasurementIds.add(measurementId);
+            if (isPending) {
+                delete m._pendingSync;
+                measurementsChanged = true;
+            }
+        }
+
+        for (const s of appState.sessions) {
+            const sessId = sessionIdValue(s);
+            const missingInCloud = !cloudSessionIds.has(sessId);
+            const isPending = s._pendingSync === true;
+            if (!missingInCloud && !isPending) continue;
+            await pushSession(s);
+            cloudSessionIds.add(sessId);
+            if (isPending) {
+                delete s._pendingSync;
+                sessionsChanged = true;
+            }
+        }
+
+        if (measurementsChanged) localStorage.setItem('omegahrv_measurements', JSON.stringify(appState.measurements));
+        if (sessionsChanged) localStorage.setItem('omegahrv_sessions', JSON.stringify(appState.sessions));
     }
 
     // --- AUTH LOGIC ---
@@ -224,7 +303,8 @@
     async function onAuthSuccess() {
         setSyncStatus('syncing', 'Syncing...');
         try {
-            await syncDown();
+            await runSyncDown();
+            await syncPendingLocalDataAfterLogin();
             setSyncStatus('synced', 'Synced');
         } catch(e) {
             console.error('Sync down failed:', e);
@@ -428,7 +508,7 @@
                 })));
             }
             // Then pull to reconcile
-            await syncDown();
+            await runSyncDown();
             initApp();
             renderActiveView();
             setSyncStatus('synced', 'Synced');
@@ -442,6 +522,24 @@
 
     // --- INITIALIZATION ---
     document.addEventListener("DOMContentLoaded", async () => {
+        updateLastSyncedLabel();
+        setInterval(updateLastSyncedLabel, 60000);
+        document.addEventListener('visibilitychange', async () => {
+            if (document.visibilityState !== 'visible' || !currentUser) return;
+            const now = Date.now();
+            if (now - lastVisibilitySyncAt < VISIBILITY_SYNC_DEBOUNCE_MS) return;
+            lastVisibilitySyncAt = now;
+            setSyncStatus('syncing', 'Refreshing...');
+            try {
+                await runSyncDown();
+                setSyncStatus('synced', 'Synced');
+                renderActiveView();
+            } catch (e) {
+                console.error('Visibility sync failed:', e);
+                setSyncStatus('error', 'Sync error');
+            }
+        });
+
         if (!navigator.bluetooth) {
             document.getElementById('ble-unsupported').style.display = 'block';
         }
@@ -1148,6 +1246,7 @@
         if(!bleState.lastResult) return;
         bleState.lastResult.id = crypto.randomUUID();
         bleState.lastResult.updatedAt = new Date().toISOString();
+        if (!currentUser) bleState.lastResult._pendingSync = true;
         appState.measurements.push(bleState.lastResult);
         localStorage.setItem('omegahrv_measurements', JSON.stringify(appState.measurements));
         pushMeasurement(bleState.lastResult); // sync to cloud
@@ -1667,6 +1766,7 @@
             pbDetails: [],
             updatedAt: new Date().toISOString()
         };
+        if (!currentUser) sess._pendingSync = true;
 
         if(type === 'running') {
             if (typeof recalcRunTotals === 'function') recalcRunTotals();
