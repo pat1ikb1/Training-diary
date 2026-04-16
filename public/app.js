@@ -28,8 +28,10 @@
     let currentUser = null;
     let lastSyncAt = Number(localStorage.getItem('omegahrv_last_synced_at')) || 0;
     let lastVisibilitySyncAt = 0;
+    const MINUTE_IN_MS = 60000;
     const VISIBILITY_SYNC_DEBOUNCE_MS = 30000;
     let syncDownPromise = null;
+    let visibilitySyncListenerRegistered = false;
 
     // --- STATE ---
     let appState = {
@@ -173,10 +175,26 @@
             return;
         }
         const diffMs = Math.max(0, Date.now() - lastSyncAt);
-        const mins = Math.floor(diffMs / 60000);
+        const mins = Math.floor(diffMs / MINUTE_IN_MS);
         syncLastEl.textContent = mins <= 0
             ? 'Last synced: just now'
             : `Last synced: ${mins} min${mins === 1 ? '' : 's'} ago`;
+    }
+
+    async function handleVisibilitySync() {
+        if (document.visibilityState !== 'visible' || !currentUser) return;
+        const now = Date.now();
+        if (now - lastVisibilitySyncAt < VISIBILITY_SYNC_DEBOUNCE_MS) return;
+        lastVisibilitySyncAt = now;
+        setSyncStatus('syncing', 'Refreshing...');
+        try {
+            await runSyncDown();
+            setSyncStatus('synced', 'Synced');
+            renderActiveView();
+        } catch (e) {
+            console.error('Visibility sync failed:', e);
+            setSyncStatus('error', 'Sync error');
+        }
     }
 
     async function runSyncDown() {
@@ -523,22 +541,11 @@
     // --- INITIALIZATION ---
     document.addEventListener("DOMContentLoaded", async () => {
         updateLastSyncedLabel();
-        setInterval(updateLastSyncedLabel, 60000);
-        document.addEventListener('visibilitychange', async () => {
-            if (document.visibilityState !== 'visible' || !currentUser) return;
-            const now = Date.now();
-            if (now - lastVisibilitySyncAt < VISIBILITY_SYNC_DEBOUNCE_MS) return;
-            lastVisibilitySyncAt = now;
-            setSyncStatus('syncing', 'Refreshing...');
-            try {
-                await runSyncDown();
-                setSyncStatus('synced', 'Synced');
-                renderActiveView();
-            } catch (e) {
-                console.error('Visibility sync failed:', e);
-                setSyncStatus('error', 'Sync error');
-            }
-        });
+        setInterval(updateLastSyncedLabel, MINUTE_IN_MS);
+        if (!visibilitySyncListenerRegistered) {
+            document.addEventListener('visibilitychange', handleVisibilitySync);
+            visibilitySyncListenerRegistered = true;
+        }
 
         if (!navigator.bluetooth) {
             document.getElementById('ble-unsupported').style.display = 'block';
