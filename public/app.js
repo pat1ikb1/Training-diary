@@ -31,7 +31,6 @@
     const MINUTE_IN_MS = 60000;
     const VISIBILITY_SYNC_DEBOUNCE_MS = 30000;
     let syncDownPromise = null;
-    let visibilitySyncListenerRegistered = false;
 
     // --- STATE ---
     let appState = {
@@ -200,9 +199,7 @@
     async function runSyncDown() {
         if (!currentUser) return;
         if (syncDownPromise) return syncDownPromise;
-        syncDownPromise = (async () => {
-            await syncDown();
-        })();
+        syncDownPromise = syncDown();
         try {
             await syncDownPromise;
         } finally {
@@ -220,35 +217,40 @@
 
         const cloudMeasurementIds = new Set(measRows.map((row) => row.id));
         const cloudSessionIds = new Set(sessRows.map((row) => row.id));
-        let measurementsChanged = false;
-        let sessionsChanged = false;
-
+        const measurementUploadTargets = [];
         for (const m of appState.measurements) {
             const measurementId = fallbackMeasurementId(m);
             const missingInCloud = !cloudMeasurementIds.has(measurementId);
             const isPending = m._pendingSync === true;
             if (!missingInCloud && !isPending) continue;
-            await pushMeasurement(m);
+            measurementUploadTargets.push(m);
             cloudMeasurementIds.add(measurementId);
-            if (isPending) {
-                delete m._pendingSync;
-                measurementsChanged = true;
-            }
         }
+        if (measurementUploadTargets.length) await Promise.all(measurementUploadTargets.map((m) => pushMeasurement(m)));
 
+        const sessionUploadTargets = [];
         for (const s of appState.sessions) {
             const sessId = sessionIdValue(s);
             const missingInCloud = !cloudSessionIds.has(sessId);
             const isPending = s._pendingSync === true;
             if (!missingInCloud && !isPending) continue;
-            await pushSession(s);
+            sessionUploadTargets.push(s);
             cloudSessionIds.add(sessId);
-            if (isPending) {
-                delete s._pendingSync;
-                sessionsChanged = true;
-            }
         }
+        if (sessionUploadTargets.length) await Promise.all(sessionUploadTargets.map((s) => pushSession(s)));
 
+        let measurementsChanged = false;
+        let sessionsChanged = false;
+        for (const m of measurementUploadTargets) {
+            if (m._pendingSync !== true) continue;
+            delete m._pendingSync;
+            measurementsChanged = true;
+        }
+        for (const s of sessionUploadTargets) {
+            if (s._pendingSync !== true) continue;
+            delete s._pendingSync;
+            sessionsChanged = true;
+        }
         if (measurementsChanged) localStorage.setItem('omegahrv_measurements', JSON.stringify(appState.measurements));
         if (sessionsChanged) localStorage.setItem('omegahrv_sessions', JSON.stringify(appState.sessions));
     }
@@ -542,10 +544,7 @@
     document.addEventListener("DOMContentLoaded", async () => {
         updateLastSyncedLabel();
         setInterval(updateLastSyncedLabel, MINUTE_IN_MS);
-        if (!visibilitySyncListenerRegistered) {
-            document.addEventListener('visibilitychange', handleVisibilitySync);
-            visibilitySyncListenerRegistered = true;
-        }
+        document.addEventListener('visibilitychange', handleVisibilitySync);
 
         if (!navigator.bluetooth) {
             document.getElementById('ble-unsupported').style.display = 'block';
