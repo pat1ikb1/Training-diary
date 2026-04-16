@@ -331,10 +331,9 @@
 
         if (!appState.onboarded) {
             document.getElementById('modal-onboard').classList.add('active');
-        } else {
-            initApp();
-            renderActiveView();
         }
+        initApp();
+        renderActiveView();
         applySettingsToUI();
     }
 
@@ -418,14 +417,13 @@
                 localStorage.setItem('omegahrv_settings', JSON.stringify(appState.settings));
                 appState.onboarded = true;
                 localStorage.setItem('omegahrv_onboarded', 'true');
+                applySettingsToUI();
             }
             if(prof.personal_bests) {
                 appState.personalBests = prof.personal_bests;
                 localStorage.setItem('omegahrv_pbs', JSON.stringify(appState.personalBests));
             }
         }
-        if (typeof initApp === 'function') { initApp(); }
-        if (typeof renderActiveView === 'function') { renderActiveView(); }
     }
 
     async function pushMeasurement(m) {
