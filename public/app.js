@@ -368,8 +368,10 @@
 
     async function syncDown() {
         if(!currentUser) return;
+        console.log('[SyncDown] Starting for user:', currentUser.id);
 
         let { data: meas } = await sbClient.from('measurements').select('*').eq('user_id', currentUser.id).order('date', { ascending: true });
+        console.log('[SyncDown] Measurements from cloud:', meas ? meas.length : 'null/error');
         if(meas) {
             const cloudMeasurements = meas.map(m => ({
                 id: m.id,
@@ -388,6 +390,7 @@
         }
 
         let { data: sess } = await sbClient.from('sessions').select('*').eq('user_id', currentUser.id).order('date', { ascending: false });
+        console.log('[SyncDown] Sessions from cloud:', sess ? sess.length : 'null/error');
         if(sess) {
             const cloudSessions = sess.map(s => ({
                 id: s.id,
@@ -421,6 +424,8 @@
                 localStorage.setItem('omegahrv_pbs', JSON.stringify(appState.personalBests));
             }
         }
+        if (typeof initApp === 'function') { initApp(); }
+        if (typeof renderActiveView === 'function') { renderActiveView(); }
     }
 
     async function pushMeasurement(m) {
@@ -449,8 +454,9 @@
         if(!currentUser) return;
         setSyncStatus('syncing', 'Saving...');
         try {
+            const sessionId = sessionIdValue(s);
             await sbClient.from('sessions').upsert({
-                id: s.id,
+                id: sessionId,
                 user_id: currentUser.id,
                 date: s.date,
                 time: s.time,
@@ -465,6 +471,12 @@
                 other_data: s.other || null,
                 updated_at: s.updatedAt || new Date().toISOString()
             });
+            if (!s.id) {
+                s.id = sessionId;
+                const idx = appState.sessions.findIndex(x => sessionIdValue(x) === sessionId);
+                if (idx >= 0) appState.sessions[idx] = s;
+                localStorage.setItem('omegahrv_sessions', JSON.stringify(appState.sessions));
+            }
             setSyncStatus('synced', 'Synced');
         } catch(e) { console.error(e); setSyncStatus('error', 'Sync error'); }
     }
