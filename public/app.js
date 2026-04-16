@@ -371,9 +371,8 @@
     async function syncDown() {
         if(!currentUser) return;
 
-        // 1. Pull measurements
         let { data: meas } = await sbClient.from('measurements').select('*').eq('user_id', currentUser.id).order('date', { ascending: true });
-        if(meas && meas.length > 0) {
+        if(meas) {
             const cloudMeasurements = meas.map(m => ({
                 id: m.id,
                 date: m.date,
@@ -390,9 +389,8 @@
             localStorage.setItem('omegahrv_measurements', JSON.stringify(appState.measurements));
         }
 
-        // 2. Pull sessions
         let { data: sess } = await sbClient.from('sessions').select('*').eq('user_id', currentUser.id).order('date', { ascending: false });
-        if(sess && sess.length > 0) {
+        if(sess) {
             const cloudSessions = sess.map(s => ({
                 id: s.id,
                 date: s.date,
@@ -412,7 +410,6 @@
             localStorage.setItem('omegahrv_sessions', JSON.stringify(appState.sessions));
         }
 
-        // 3. Pull profile (settings + PBs)
         let { data: prof } = await sbClient.from('profiles').select('*').eq('user_id', currentUser.id).single();
         if(prof) {
             if(prof.settings) {
