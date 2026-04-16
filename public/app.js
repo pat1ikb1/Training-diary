@@ -221,8 +221,7 @@
         for (const m of appState.measurements) {
             const measurementId = fallbackMeasurementId(m);
             const missingInCloud = !cloudMeasurementIds.has(measurementId);
-            const isPending = m._pendingSync === true;
-            if (!missingInCloud && !isPending) continue;
+            if (!missingInCloud) continue;
             measurementUploadTargets.push(m);
             cloudMeasurementIds.add(measurementId);
         }
@@ -232,8 +231,7 @@
         for (const s of appState.sessions) {
             const sessId = sessionIdValue(s);
             const missingInCloud = !cloudSessionIds.has(sessId);
-            const isPending = s._pendingSync === true;
-            if (!missingInCloud && !isPending) continue;
+            if (!missingInCloud) continue;
             sessionUploadTargets.push(s);
             cloudSessionIds.add(sessId);
         }
@@ -1769,8 +1767,6 @@
             pbDetails: [],
             updatedAt: new Date().toISOString()
         };
-        if (!currentUser) sess._pendingSync = true;
-
         if(type === 'running') {
             if (typeof recalcRunTotals === 'function') recalcRunTotals();
             let dataRows = qsa('#run-splits-table tbody tr.split-data-row');
@@ -1844,6 +1840,10 @@
         appState.sessions.sort(compareSessionDateTimeDesc);
 
         recomputePersonalBestsFromSessions();
+        if (!currentUser) {
+            sess._pendingSync = true;
+            showToast('Not signed in — session saved locally only. Sign in to sync.', 'warning');
+        }
         pushSession(sess); // sync to cloud
         pushProfile();
         
