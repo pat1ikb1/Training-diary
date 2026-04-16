@@ -432,7 +432,7 @@
 
         let { data: prof } = await sbClient.from('profiles').select('*').eq('user_id', currentUser.id).single();
         if(prof) {
-            if(prof.settings !== null && prof.settings !== undefined) {
+            if(prof.settings != null) {
                 appState.settings = prof.settings;
                 localStorage.setItem('omegahrv_settings', JSON.stringify(appState.settings));
                 appState.onboarded = true;
