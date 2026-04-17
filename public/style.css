@@ -344,6 +344,10 @@
             display: flex; flex-direction: column; gap: 16px; border: 1px solid var(--border);
             position: relative;
         }
+        .modal-inputs { display: flex; flex-direction: column; gap: 12px; }
+        .modal-input-group { display: flex; flex-direction: column; gap: 6px; }
+        .modal-input-group label { font-size: 0.8rem; color: var(--text-muted); }
+        .modal-input-group input { width: 100%; }
 
         .modal-actions { display: flex; gap: 10px; }
         .modal-actions button { flex: 1; }
