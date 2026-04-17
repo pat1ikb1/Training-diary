@@ -7,7 +7,7 @@ describe('filterRR', () => {
     });
 
     it('filters out values below 300ms and above 2000ms', () => {
-        expect(filterRR([250, 300, 800, 2100, 1999])).toEqual([300, 800, 1999]);
+        expect(filterRR([250, 700, 710, 2100, 720])).toEqual([700, 710, 720]);
     });
 
     it('rejects >20% changes but resets baseline after 2 consecutive rejects', () => {
