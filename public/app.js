@@ -2243,6 +2243,7 @@
     let currentCalYear = new Date().getFullYear();
     let currentCalMonth = new Date().getMonth();
     let selectedCalendarDate = null;
+    let selectedCalendarDayEl = null;
 
     window.changeMonth = function(dir) {
         currentCalMonth += dir;
@@ -2255,7 +2256,6 @@
         currentCalYear = year; currentCalMonth = month;
         let c = document.getElementById('calendar-days');
         c.innerHTML = '';
-        selectedCalendarDate = null;
         const hint = document.getElementById('cal-hint');
         if (hint) hint.style.display = '';
         closeDayDetails();
@@ -2344,12 +2344,14 @@
         if (!dateStr) return;
         if (selectedCalendarDate === dateStr) {
             selectedCalendarDate = null;
-            this.classList.remove('active');
+            if (selectedCalendarDayEl) selectedCalendarDayEl.classList.remove('active');
+            selectedCalendarDayEl = null;
             closeDayDetails();
             return;
         }
-        document.querySelectorAll('#calendar-days .cal-day.active').forEach((el) => el.classList.remove('active'));
+        if (selectedCalendarDayEl) selectedCalendarDayEl.classList.remove('active');
         this.classList.add('active');
+        selectedCalendarDayEl = this;
         selectedCalendarDate = dateStr;
         const liveMeas = appState.measurements.find(m => normalizeDate(m.date) === dateStr);
         const liveSess = appState.sessions.filter(s => normalizeDate(s.date) === dateStr);
@@ -2358,11 +2360,20 @@
 
     function closeDayDetails() {
         const container = document.getElementById('calendar-day-details');
-        if (!container) return;
+        if (!container) {
+            clearSelectedCalendarState();
+            return;
+        }
+        clearSelectedCalendarState();
         container.classList.remove('visible');
         container.setAttribute('aria-hidden', 'true');
         container.innerHTML = '';
-        container.scrollTop = 0;
+    }
+
+    function clearSelectedCalendarState() {
+        selectedCalendarDate = null;
+        if (selectedCalendarDayEl) selectedCalendarDayEl.classList.remove('active');
+        selectedCalendarDayEl = null;
     }
 
     function openDayModal(date, om, sessions) {
