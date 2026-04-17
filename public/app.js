@@ -390,8 +390,6 @@
     async function loadSessions() {
         if (!currentUser) return;
         await runSyncDown();
-        appState.sessions.sort(compareSessionDateTimeDesc);
-        localStorage.setItem('omegahrv_sessions', JSON.stringify(appState.sessions));
     }
 
     async function syncPendingLocalDataAfterLogin() {
@@ -1645,8 +1643,8 @@
         attachExerciseAutocompletePersistence(nameInput);
         if (preset && typeof preset === 'object') {
             nameInput.value = preset.name || '';
-            card.querySelector('.warmup-ex-weight').value = Number.isFinite(Number(preset.weight)) ? Number(preset.weight) : (preset.weight || '');
-            card.querySelector('.warmup-ex-reps').value = Number.isFinite(Number(preset.reps)) ? Number(preset.reps) : (preset.reps || '');
+            card.querySelector('.warmup-ex-weight').value = Number.isFinite(preset.weight) ? preset.weight : (preset.weight || '');
+            card.querySelector('.warmup-ex-reps').value = Number.isFinite(preset.reps) ? preset.reps : (preset.reps || '');
         }
     }
 
@@ -1670,9 +1668,9 @@
         attachExerciseAutocompletePersistence(nameInput);
         if (preset && typeof preset === 'object') {
             nameInput.value = preset.name || '';
-            card.querySelector('.other-ex-sets').value = Number.isFinite(Number(preset.sets)) ? Number(preset.sets) : (preset.sets || '');
-            card.querySelector('.other-ex-reps').value = Number.isFinite(Number(preset.reps)) ? Number(preset.reps) : (preset.reps || '');
-            card.querySelector('.other-ex-weight').value = Number.isFinite(Number(preset.weight)) ? Number(preset.weight) : (preset.weight || '');
+            card.querySelector('.other-ex-sets').value = Number.isFinite(preset.sets) ? preset.sets : (preset.sets || '');
+            card.querySelector('.other-ex-reps').value = Number.isFinite(preset.reps) ? preset.reps : (preset.reps || '');
+            card.querySelector('.other-ex-weight').value = Number.isFinite(preset.weight) ? preset.weight : (preset.weight || '');
         }
     }
 
@@ -2150,7 +2148,7 @@
         }
 
         setSessionEditState(null);
-        clearLogForm();
+        resetLogForm();
         renderSessionList();
         renderLogSparkline();
         renderPBsGym();
@@ -2189,9 +2187,6 @@
         updateRunCalcs();
     }
 
-    function clearLogForm() {
-        resetLogForm();
-    }
 
     function checkAndUpdatePBs(sess, state = appState) {
         if (!state.personalBests) state.personalBests = { track: {}, gym: {} };
