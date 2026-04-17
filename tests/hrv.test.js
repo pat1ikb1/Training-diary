@@ -60,6 +60,14 @@ describe('calcReadiness', () => {
         expect(score).toBeLessThanOrEqual(100);
     });
 
+    it('excludes today (latest) measurement from baseline window', () => {
+        const withTodayOutlier = Array.from({ length: 30 }, (_, i) => ({ rmssd: i === 29 ? 500 : 50 }));
+        const withoutTodayOutlier = Array.from({ length: 30 }, () => ({ rmssd: 50 }));
+        const scoreWithOutlierToday = calcReadiness(60, withTodayOutlier);
+        const scoreWithoutOutlierToday = calcReadiness(60, withoutTodayOutlier);
+        expect(scoreWithOutlierToday).toBe(scoreWithoutOutlierToday);
+    });
+
     it('returns a higher score when rmssd is above baseline', () => {
         const measurements = Array.from({ length: 30 }, (_, i) => ({ rmssd: i === 29 ? 999 : 50 }));
         const low = calcReadiness(40, measurements);

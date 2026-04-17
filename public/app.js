@@ -490,6 +490,7 @@
             const id = item.id || fallbackEntityId(item, prefix);
             const current = merged.get(id);
             const normalized = { ...item, id };
+            // On timestamp ties prefer the later source in merge order (cloud array is appended after local).
             if (!current || tsValue(normalized) >= tsValue(current)) merged.set(id, normalized);
         });
         return [...merged.values()];
