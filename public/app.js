@@ -2242,6 +2242,8 @@
     // --- CALENDAR RENDERING ---
     let currentCalYear = new Date().getFullYear();
     let currentCalMonth = new Date().getMonth();
+    let selectedCalendarDate = null;
+    let selectedCalendarDayEl = null;
 
     window.changeMonth = function(dir) {
         currentCalMonth += dir;
@@ -2256,11 +2258,7 @@
         c.innerHTML = '';
         const hint = document.getElementById('cal-hint');
         if (hint) hint.style.display = '';
-        const detailPanel = document.getElementById('calendar-day-details');
-        if (detailPanel) {
-            detailPanel.classList.remove('visible');
-            detailPanel.innerHTML = '';
-        }
+        closeDayDetails();
         let monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
         document.getElementById('calendar-header').innerText = `${monthNames[month]} ${year}`;
         
@@ -2279,7 +2277,7 @@
         for(let d=1; d<=daysInMonth; d++) {
             let dateStr = `${year}-${(month+1).toString().padStart(2,'0')}-${d.toString().padStart(2,'0')}`;
             let el = document.createElement('div');
-            el.className = 'cal-day' + (dateStr === todayStr ? ' today' : '');
+            el.className = 'cal-day' + (dateStr === todayStr ? ' today' : '') + (dateStr === selectedCalendarDate ? ' active' : '');
             
             let om = appState.measurements.find(m => normalizeDate(m.date) === dateStr);
             let sesss = appState.sessions.filter(s => normalizeDate(s.date) === dateStr);
@@ -2344,9 +2342,38 @@
     function handleDayInteraction() {
         const dateStr = this.getAttribute('data-date');
         if (!dateStr) return;
+        if (selectedCalendarDate === dateStr) {
+            selectedCalendarDate = null;
+            if (selectedCalendarDayEl) selectedCalendarDayEl.classList.remove('active');
+            selectedCalendarDayEl = null;
+            closeDayDetails();
+            return;
+        }
+        if (selectedCalendarDayEl) selectedCalendarDayEl.classList.remove('active');
+        this.classList.add('active');
+        selectedCalendarDayEl = this;
+        selectedCalendarDate = dateStr;
         const liveMeas = appState.measurements.find(m => normalizeDate(m.date) === dateStr);
         const liveSess = appState.sessions.filter(s => normalizeDate(s.date) === dateStr);
         openDayModal(dateStr, liveMeas, liveSess);
+    }
+
+    function closeDayDetails() {
+        const container = document.getElementById('calendar-day-details');
+        if (!container) {
+            clearSelectedCalendarState();
+            return;
+        }
+        clearSelectedCalendarState();
+        container.classList.remove('visible');
+        container.setAttribute('aria-hidden', 'true');
+        container.innerHTML = '';
+    }
+
+    function clearSelectedCalendarState() {
+        selectedCalendarDate = null;
+        if (selectedCalendarDayEl) selectedCalendarDayEl.classList.remove('active');
+        selectedCalendarDayEl = null;
     }
 
     function openDayModal(date, om, sessions) {
@@ -2364,6 +2391,8 @@
 
         container.innerHTML = '';
         container.classList.add('visible');
+        container.setAttribute('aria-hidden', 'false');
+        container.scrollTop = 0;
 
         const card = document.createElement('div');
         card.className = 'card';
@@ -2599,13 +2628,6 @@
             }
         }
         container.appendChild(card);
-        
-        setTimeout(() => {
-            const detailPanel = document.getElementById('calendar-day-details');
-            if (detailPanel) {
-                detailPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            }
-        }, 300);
     }
     window.openDayModal = openDayModal;
 
