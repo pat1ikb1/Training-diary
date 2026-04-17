@@ -1,2 +1,2 @@
-window.__SUPABASE_URL__ = window.__SUPABASE_URL__ || '';
-window.__SUPABASE_ANON_KEY__ = window.__SUPABASE_ANON_KEY__ || '';
+window.__SUPABASE_URL__ = 'https://lkbexgqclzodqllfemix.supabase.co';
+window.__SUPABASE_ANON_KEY__ = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxrYmV4Z3FjbHpvZHFsbGZlbWl4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU3NjE3NjEsImV4cCI6MjA5MTMzNzc2MX0.LikIfvtMf-XlU9SAb1j-uBpKxn93p724AIoqfnG9B-E';
