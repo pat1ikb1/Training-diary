@@ -215,7 +215,7 @@
         try {
             const [{ data: fetchedMeasRows = [], error: measError }, { data: fetchedSessRows = [], error: sessError }] = await Promise.all([
                 sbClient.from('measurements').select('id').eq('user_id', currentUser.id),
-                sbClient.from('sessions').select('id').eq('user_id', currentUser.id)
+                sbClient.from('training_sessions').select('id').eq('user_id', currentUser.id)
             ]);
             if (measError || sessError) {
                 if (measError) console.error('Failed to read cloud measurement IDs before sync upload:', measError);
@@ -405,7 +405,7 @@
             localStorage.setItem('omegahrv_measurements', JSON.stringify(appState.measurements));
         }
 
-        let { data: sess } = await sbClient.from('sessions').select('*').eq('user_id', currentUser.id).order('date', { ascending: false });
+        let { data: sess } = await sbClient.from('training_sessions').select('*').eq('user_id', currentUser.id).order('date', { ascending: false });
         console.log('[SyncDown] Sessions from cloud:', sess ? sess.length : 'null/error');
         if(sess) {
             const cloudSessions = sess.map(s => ({
@@ -473,7 +473,7 @@
         setSyncStatus('syncing', 'Saving...');
         try {
             const sessionId = sessionIdValue(s);
-            await sbClient.from('sessions').upsert({
+            await sbClient.from('training_sessions').upsert({
                 id: sessionId,
                 user_id: currentUser.id,
                 date: s.date,
@@ -535,7 +535,7 @@
                 })), { onConflict: 'id' });
             }
             if (appState.sessions.length) {
-                await sbClient.from('sessions').upsert(appState.sessions.map(s => ({
+                await sbClient.from('training_sessions').upsert(appState.sessions.map(s => ({
                     id: sessionIdValue(s),
                     user_id: currentUser.id,
                     date: s.date,
@@ -2039,7 +2039,7 @@
             recomputePersonalBestsFromSessions();
             if (currentUser) {
                 try {
-                    const query = sbClient.from('sessions');
+                    const query = sbClient.from('training_sessions');
                     if (query.delete) await query.delete().eq('user_id', currentUser.id).eq('id', id);
                 } catch(e) { console.warn('Cloud session delete failed', e); }
             }
