@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { filterRR, computeHRV, calcReadiness } from '../public/hrv.js';
 
+const MEASUREMENT_COUNT = 30;
+const OUTLIER_INDEX = 29;
+const OUTLIER_VALUE = 999;
+const BASELINE_VALUE = 50;
+
 describe('filterRR', () => {
     it('returns empty array for empty input', () => {
         expect(filterRR([])).toEqual([]);
@@ -54,29 +59,29 @@ describe('calcReadiness', () => {
     });
 
     it('returns a value between 0 and 100 for valid input', () => {
-        const measurements = Array.from({ length: 30 }, (_, i) => ({ rmssd: i === 29 ? 999 : 50 }));
+        const measurements = Array.from({ length: MEASUREMENT_COUNT }, (_, i) => ({ rmssd: i === OUTLIER_INDEX ? OUTLIER_VALUE : BASELINE_VALUE }));
         const score = calcReadiness(65, measurements);
         expect(score).toBeGreaterThanOrEqual(0);
         expect(score).toBeLessThanOrEqual(100);
     });
 
     it('excludes today (latest) measurement from baseline window', () => {
-        const withTodayOutlier = Array.from({ length: 30 }, (_, i) => ({ rmssd: i === 29 ? 500 : 50 }));
-        const withoutTodayOutlier = Array.from({ length: 30 }, () => ({ rmssd: 50 }));
+        const withTodayOutlier = Array.from({ length: MEASUREMENT_COUNT }, (_, i) => ({ rmssd: i === OUTLIER_INDEX ? 500 : BASELINE_VALUE }));
+        const withoutTodayOutlier = Array.from({ length: MEASUREMENT_COUNT }, () => ({ rmssd: BASELINE_VALUE }));
         const scoreWithOutlierToday = calcReadiness(60, withTodayOutlier);
         const scoreWithoutOutlierToday = calcReadiness(60, withoutTodayOutlier);
         expect(scoreWithOutlierToday).toBe(scoreWithoutOutlierToday);
     });
 
     it('returns a higher score when rmssd is above baseline', () => {
-        const measurements = Array.from({ length: 30 }, (_, i) => ({ rmssd: i === 29 ? 999 : 50 }));
+        const measurements = Array.from({ length: MEASUREMENT_COUNT }, (_, i) => ({ rmssd: i === OUTLIER_INDEX ? OUTLIER_VALUE : BASELINE_VALUE }));
         const low = calcReadiness(40, measurements);
         const high = calcReadiness(70, measurements);
         expect(high).toBeGreaterThan(low);
     });
 
     it('returns a lower score when rmssd is below baseline', () => {
-        const measurements = Array.from({ length: 30 }, (_, i) => ({ rmssd: i === 29 ? 999 : 50 }));
+        const measurements = Array.from({ length: MEASUREMENT_COUNT }, (_, i) => ({ rmssd: i === OUTLIER_INDEX ? OUTLIER_VALUE : BASELINE_VALUE }));
         const high = calcReadiness(70, measurements);
         const low = calcReadiness(30, measurements);
         expect(low).toBeLessThan(high);

@@ -75,7 +75,9 @@ export function computeHRV(rrArray) {
 }
 
 export function calcReadiness(rmssd, measurements = []) {
-    let baselineWindow = measurements.slice(-29, -1);
+    const baselineStart = -(BASELINE_WINDOW_DAYS + EXCLUDE_LATEST_MEASUREMENT);
+    const baselineEnd = -EXCLUDE_LATEST_MEASUREMENT;
+    let baselineWindow = measurements.slice(baselineStart, baselineEnd);
     if (baselineWindow.length === 0) return 50;
     let baseline = baselineWindow.reduce((sum, m) => sum + Number(m.rmssd || 0), 0) / baselineWindow.length;
     if (!baseline || baseline <= 0) return 50;
@@ -84,3 +86,5 @@ export function calcReadiness(rmssd, measurements = []) {
     let score = raw * confidenceFactor + (50 * (1 - confidenceFactor));
     return Math.max(0, Math.min(100, Math.round(score)));
 }
+const BASELINE_WINDOW_DAYS = 28;
+const EXCLUDE_LATEST_MEASUREMENT = 1;

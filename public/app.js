@@ -216,9 +216,8 @@
     }
 
     function migrateLocalStorage() {
-        const rawVersion = Number.parseInt(localStorage.getItem('omegahrv_schema_version') || '0', 10);
-        let schemaVersion = Number.isFinite(rawVersion) ? rawVersion : 0;
-        if (schemaVersion < 0) schemaVersion = 0;
+        let schemaVersion = Number.parseInt(localStorage.getItem('omegahrv_schema_version') || '0', 10);
+        if (!Number.isFinite(schemaVersion) || schemaVersion < 0) schemaVersion = 0;
         const fromVersion = schemaVersion;
 
         while (schemaVersion < APP_SCHEMA_VERSION) {
@@ -486,14 +485,21 @@
 
     function mergeByLatest(localArr, cloudArr, prefix = 'legacy') {
         const merged = new Map();
-        [...localArr, ...cloudArr].forEach((item) => {
+        const taggedLocal = localArr.map((item) => ({ ...item, _mergeSource: 'local' }));
+        const taggedCloud = cloudArr.map((item) => ({ ...item, _mergeSource: 'cloud' }));
+        [...taggedLocal, ...taggedCloud].forEach((item) => {
             const id = item.id || fallbackEntityId(item, prefix);
             const current = merged.get(id);
             const normalized = { ...item, id };
-            // On timestamp ties prefer the later source in merge order (cloud array is appended after local).
-            if (!current || tsValue(normalized) >= tsValue(current)) merged.set(id, normalized);
+            const nextTs = tsValue(normalized);
+            const currentTs = tsValue(current);
+            const nextSourceRank = normalized._mergeSource === 'cloud' ? 1 : 0;
+            const currentSourceRank = current?._mergeSource === 'cloud' ? 1 : 0;
+            if (!current || nextTs > currentTs || (nextTs === currentTs && nextSourceRank >= currentSourceRank)) {
+                merged.set(id, normalized);
+            }
         });
-        return [...merged.values()];
+        return [...merged.values()].map(({ _mergeSource, ...item }) => item);
     }
 
     function compareMeasurementDateAsc(a, b) {
