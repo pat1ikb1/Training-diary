@@ -210,6 +210,14 @@
             </div>
 
             <div id="log-form-running" class="log-form-section active">
+                <details id="run-warmup-section" style="margin-bottom: 15px;">
+                    <summary style="cursor:pointer; font-size:1rem; font-weight:600; padding: 8px 0;">🔥 Warmup</summary>
+                    <div class="card" style="margin-top:10px;">
+                        <input type="text" id="run-warmup-duration" placeholder="Warmup Duration (mm:ss)">
+                        <input type="text" id="run-warmup-distance" placeholder="Warmup Distance (m)">
+                        <input type="text" id="run-warmup-notes" placeholder="Notes (e.g. drills, strides)">
+                    </div>
+                </details>
                 <div class="card">
                     <div class="card-row" style="font-size: 0.85rem; color: var(--text-muted);">
                         <span>Total Distance</span>
@@ -229,7 +237,7 @@
                     <h3 style="font-size: 1rem;">Splits</h3>
                     <button style="width: auto; min-height: 30px; padding: 4px 10px; font-size: 0.8rem;" onclick="syncSplitsToTotal()">Sync Totals</button>
                 </div>
-                <div class="card" style="padding:0; overflow-x: auto;">
+                <div class="card run-splits-wrapper" style="padding:0; overflow-x: auto; max-width: 100%;">
                     <table class="data-table" id="run-splits-table">
                         <thead><tr><th>Spikes</th><th>Dist (m)</th><th>Time (s)</th><th>Rest</th><th>km/h</th><th>m/s</th><th></th></tr></thead>
                         <tbody></tbody>
@@ -246,6 +254,12 @@
                     <input type="text" id="lift-duration" placeholder="Session Duration (mm:ss)">
                 </div>
 
+                <details id="lift-warmup-section" style="margin-bottom: 15px;">
+                    <summary style="cursor:pointer; font-size:1rem; font-weight:600; padding: 8px 0;">🔥 Warmup</summary>
+                    <div id="lift-warmup-exercises-container" style="display: flex; flex-direction: column; gap: 12px; margin-top: 10px;"></div>
+                    <button style="margin-top:8px; width:auto; padding: 6px 12px; font-size: 0.85rem;" onclick="addWarmupExercise()">+ Add Warmup Exercise</button>
+                </details>
+
                 <div id="lift-exercises-container" style="display: flex; flex-direction: column; gap: 16px; margin-top: 15px;"></div>
                 <button class="primary" style="margin-top: 10px;" onclick="addLiftExercise()">+ Add Exercise</button>
             </div>
@@ -255,6 +269,8 @@
                     <input type="text" id="other-activity" placeholder="Activity Name">
                     <input type="text" id="other-duration" placeholder="Duration (mm:ss)">
                 </div>
+                <div id="other-exercises-container" style="display: flex; flex-direction: column; gap: 16px; margin-top: 15px;"></div>
+                <button class="primary" style="margin-top: 10px;" onclick="addOtherExercise()">+ Add Exercise</button>
             </div>
 
             <button id="save-session-btn" class="primary" style="margin-top: 20px; font-weight: 600;" onclick="saveSession()">Save Session</button>

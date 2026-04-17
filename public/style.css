@@ -370,8 +370,35 @@
         .segmented-control input[type="radio"] { display: none; }
         .segmented-control label { flex: 1; text-align: center; padding: 8px 12px; border-radius: 6px; font-size: 0.9rem; font-weight: 500; cursor: pointer; transition: all 0.2s; color: var(--text-muted); }
         .segmented-control input[type="radio"]:checked + label { background: var(--accent); color: #000; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        #log-type-control { flex-wrap: wrap; gap: 4px; }
-        #log-type-control label { flex: 1 1 calc(33.333% - 4px); min-width: 0; white-space: normal; overflow-wrap: anywhere; padding: 8px 8px; }
+        #log-type-control {
+            flex-wrap: nowrap;
+            gap: 4px;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            max-width: 100%;
+        }
+        #log-type-control label { flex: 1 0 auto; min-width: 120px; white-space: normal; overflow-wrap: anywhere; padding: 8px 8px; }
+
+        #run-splits-table { width: 100%; max-width: 100%; }
+        .run-splits-wrapper { max-width: 100%; overflow-x: auto; }
+        #log-session-list .log-item,
+        #log-session-list .log-session-card {
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+        .log-session-card .session-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+            flex-wrap: wrap;
+        }
+        .log-session-card .session-actions button {
+            width: auto;
+            min-height: 44px;
+            padding: 8px 12px;
+            font-size: 0.85rem;
+        }
+        #log-form-base .card-row > div { min-width: 0; }
         
         .data-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
         .data-table th, .data-table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
@@ -452,3 +479,38 @@
         #sync-last { font-size: 0.65rem; color: var(--text-muted); }
         @keyframes spin { to { transform: rotate(360deg); } }
         .sync-indicator.syncing svg { animation: spin 1s linear infinite; }
+
+        @media (max-width: 420px) {
+            #log-form-base .card-row > div {
+                width: 100%;
+                flex: 1 1 100%;
+            }
+        }
+
+        @media (max-width: 480px) {
+          #log-form-base .card-row {
+            flex-direction: column;
+          }
+          #log-form-base .card-row > div {
+            width: 100%;
+          }
+          .log-session-card .card-row {
+            flex-wrap: wrap;
+            gap: 8px;
+          }
+          .log-session-card .card-row button {
+            flex: 1;
+            min-height: 44px;
+          }
+          #log-type-control {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+          }
+          .log-session-card .session-actions {
+            flex-direction: column;
+            align-items: stretch;
+          }
+          .log-session-card .session-actions button {
+            width: 100%;
+          }
+        }

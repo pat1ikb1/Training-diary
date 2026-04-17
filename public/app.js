@@ -42,9 +42,64 @@
         sessions: [],
         personalBests: { track: {}, gym: {} }
     };
+    const CUSTOM_EXERCISES_KEY = 'customExercises';
 
     const qs = (sel, ctx=document) => ctx.querySelector(sel);
     const qsa = (sel, ctx=document) => [...ctx.querySelectorAll(sel)];
+
+    function normalizeExerciseName(name) {
+        return String(name || '').trim();
+    }
+
+    function getCustomExercises() {
+        const items = readJsonStorage(CUSTOM_EXERCISES_KEY, []);
+        if (!Array.isArray(items)) return [];
+        return items.map(normalizeExerciseName).filter(Boolean);
+    }
+
+    function saveCustomExercises(values) {
+        const unique = [...new Set((Array.isArray(values) ? values : []).map((v) => normalizeExerciseName(v).toLowerCase()))];
+        const canonical = [];
+        unique.forEach((lc) => {
+            const original = (Array.isArray(values) ? values : []).find((v) => normalizeExerciseName(v).toLowerCase() === lc);
+            if (original) canonical.push(normalizeExerciseName(original));
+        });
+        localStorage.setItem(CUSTOM_EXERCISES_KEY, JSON.stringify(canonical));
+    }
+
+    function ensureExerciseOption(value, persist = false) {
+        const val = normalizeExerciseName(value);
+        if (!val) return;
+        const datalist = document.getElementById('exercise-list');
+        if (!datalist) return;
+        const exists = Array.from(datalist.options).some((o) => (o.value || '').trim().toLowerCase() === val.toLowerCase());
+        if (!exists) {
+            const opt = document.createElement('option');
+            opt.value = val;
+            datalist.appendChild(opt);
+        }
+        if (persist) {
+            const custom = getCustomExercises();
+            const hasCustom = custom.some((item) => item.toLowerCase() === val.toLowerCase());
+            if (!hasCustom) {
+                custom.push(val);
+                saveCustomExercises(custom);
+            }
+        }
+    }
+
+    function attachExerciseAutocompletePersistence(inputEl) {
+        if (!inputEl) return;
+        const handler = function() {
+            ensureExerciseOption(this.value, true);
+        };
+        inputEl.addEventListener('blur', handler);
+        inputEl.addEventListener('change', handler);
+    }
+
+    function restoreCustomExercisesToDatalist() {
+        getCustomExercises().forEach((name) => ensureExerciseOption(name, false));
+    }
 
     let toastTimer = null;
     function showToast(message, level = 'success') {
@@ -330,6 +385,11 @@
         } finally {
             syncDownPromise = null;
         }
+    }
+
+    async function loadSessions() {
+        if (!currentUser) return;
+        await runSyncDown();
     }
 
     async function syncPendingLocalDataAfterLogin() {
@@ -698,6 +758,7 @@
     document.addEventListener("DOMContentLoaded", async () => {
         migrateLocalStorage();
         hydrateAppStateFromLocalStorage();
+        restoreCustomExercisesToDatalist();
         updateLastSyncedLabel();
         setInterval(updateLastSyncedLabel, MINUTE_IN_MS);
         document.addEventListener('visibilitychange', handleVisibilitySync);
@@ -730,6 +791,8 @@
         if (sessionList) {
             sessionList.addEventListener('click', (e) => {
                 const btn = e.target.closest('.delete-session-btn');
+                const editBtn = e.target.closest('.edit-session-btn');
+                if (editBtn?.dataset.sessionEditId) startSessionEdit(editBtn.dataset.sessionEditId, 'log');
                 if (btn?.dataset.sessionId) deleteSession(btn.dataset.sessionId);
             });
         }
@@ -1039,6 +1102,21 @@
             meta.textContent = `${s.date || '--'} ${s.time || '--:--'} • ${s.type || 'training'}`;
             left.appendChild(title);
             left.appendChild(meta);
+
+            const extra = document.createElement('div');
+            extra.style.fontSize = '0.75rem';
+            extra.style.color = 'var(--text-muted)';
+            extra.style.marginTop = '3px';
+            if (s.type === 'running' && s.running?.warmup) {
+                const w = s.running.warmup;
+                const summary = [w.duration, w.distance ? `${w.distance}m` : '', w.notes].filter(Boolean).join(' • ');
+                if (summary) extra.textContent = `Warmup: ${summary}`;
+            } else if (s.type === 'weightlifting' && Array.isArray(s.lifting?.warmup) && s.lifting.warmup.length) {
+                extra.textContent = `Warmup exercises: ${s.lifting.warmup.length}`;
+            } else if (s.type === 'other' && Array.isArray(s.other?.exercises) && s.other.exercises.length) {
+                extra.textContent = `Exercises: ${s.other.exercises.length}`;
+            }
+            if (extra.textContent) left.appendChild(extra);
 
             const editBtn = document.createElement('button');
             editBtn.style.width = 'auto';
@@ -1541,8 +1619,59 @@
             <button class="add-lift-set-btn" style="margin-top:8px; min-height:30px; font-size:0.8rem; padding: 4px;" onclick="addExSet(this)">+ Add Set</button>
         `;
         container.appendChild(card);
+        attachExerciseAutocompletePersistence(card.querySelector('.ex-name'));
         // Add one default set
         addExSet(card.querySelector('.add-lift-set-btn'));
+    }
+
+    function addWarmupExercise(preset = null) {
+        const container = document.getElementById('lift-warmup-exercises-container');
+        if (!container) return;
+        const card = document.createElement('div');
+        card.className = 'card lift-warmup-ex-card';
+        card.style.position = 'relative';
+        card.innerHTML = `
+            <button style="position:absolute; top:8px; right:8px; padding:4px; width:auto; min-height:unset;" onclick="this.closest('.card').remove()">✕</button>
+            <input class="warmup-ex-name" type="text" list="exercise-list" placeholder="Warmup Exercise..." style="margin-bottom:8px; width: 85%;">
+            <div class="card-row" style="gap:8px; align-items:stretch; flex-wrap:wrap;">
+                <input class="warmup-ex-weight" type="number" step="any" placeholder="Weight (kg)">
+                <input class="warmup-ex-reps" type="number" placeholder="Reps">
+            </div>
+        `;
+        container.appendChild(card);
+        const nameInput = card.querySelector('.warmup-ex-name');
+        attachExerciseAutocompletePersistence(nameInput);
+        if (preset && typeof preset === 'object') {
+            nameInput.value = preset.name || '';
+            card.querySelector('.warmup-ex-weight').value = Number.isFinite(preset.weight) ? preset.weight : (preset.weight || '');
+            card.querySelector('.warmup-ex-reps').value = Number.isFinite(preset.reps) ? preset.reps : (preset.reps || '');
+        }
+    }
+
+    function addOtherExercise(preset = null) {
+        const container = document.getElementById('other-exercises-container');
+        if (!container) return;
+        const card = document.createElement('div');
+        card.className = 'card other-ex-card';
+        card.style.position = 'relative';
+        card.innerHTML = `
+            <button style="position:absolute; top:8px; right:8px; padding:4px; width:auto; min-height:unset;" onclick="this.closest('.card').remove()">✕</button>
+            <input class="other-ex-name" type="text" list="exercise-list" placeholder="Exercise Name..." style="margin-bottom:8px; width: 85%;">
+            <div class="card-row" style="gap:8px; align-items:stretch; flex-wrap:wrap;">
+                <input class="other-ex-sets" type="number" placeholder="Sets">
+                <input class="other-ex-reps" type="number" placeholder="Reps">
+                <input class="other-ex-weight" type="number" step="any" placeholder="Weight (kg)">
+            </div>
+        `;
+        container.appendChild(card);
+        const nameInput = card.querySelector('.other-ex-name');
+        attachExerciseAutocompletePersistence(nameInput);
+        if (preset && typeof preset === 'object') {
+            nameInput.value = preset.name || '';
+            card.querySelector('.other-ex-sets').value = Number.isFinite(preset.sets) ? preset.sets : (preset.sets || '');
+            card.querySelector('.other-ex-reps').value = Number.isFinite(preset.reps) ? preset.reps : (preset.reps || '');
+            card.querySelector('.other-ex-weight').value = Number.isFinite(preset.weight) ? preset.weight : (preset.weight || '');
+        }
     }
 
     function addExSet(btn, presetSet = null) {
@@ -1703,6 +1832,43 @@
         }
     }
 
+    function collectLiftWarmupExercises() {
+        return qsa('.lift-warmup-ex-card').map((card) => ({
+            name: card.querySelector('.warmup-ex-name')?.value?.trim() || '',
+            weight: parseFloat(card.querySelector('.warmup-ex-weight')?.value) || 0,
+            reps: parseInt(card.querySelector('.warmup-ex-reps')?.value, 10) || 0
+        })).filter((ex) => ex.name);
+    }
+
+    function collectOtherExercises() {
+        return qsa('.other-ex-card').map((card) => ({
+            name: card.querySelector('.other-ex-name')?.value?.trim() || '',
+            sets: parseInt(card.querySelector('.other-ex-sets')?.value, 10) || 0,
+            reps: parseInt(card.querySelector('.other-ex-reps')?.value, 10) || 0,
+            weight: parseFloat(card.querySelector('.other-ex-weight')?.value) || 0
+        })).filter((ex) => ex.name);
+    }
+
+    function appendExerciseSummaryList(container, title, exercises, formatter) {
+        if (!Array.isArray(exercises) || exercises.length === 0) return;
+        const heading = document.createElement('div');
+        heading.style.marginTop = '6px';
+        heading.style.fontWeight = 'bold';
+        heading.textContent = `${title} (${exercises.length})`;
+        container.appendChild(heading);
+        const list = document.createElement('ul');
+        list.style.margin = '2px 0 0 16px';
+        list.style.padding = '0';
+        list.style.color = 'var(--text-muted)';
+        exercises.forEach((exercise, idx) => {
+            const li = document.createElement('li');
+            li.style.listStyleType = 'circle';
+            li.textContent = formatter(exercise, idx);
+            list.appendChild(li);
+        });
+        container.appendChild(list);
+    }
+
     function recomputePersonalBestsFromSessions() {
         const preservedTrack = {};
         const existingTrack = appState.personalBests?.track || {};
@@ -1750,6 +1916,11 @@
         toggleLogType(type);
 
         if (type === 'running') {
+            document.getElementById('run-warmup-duration').value = target.running?.warmup?.duration || '';
+            document.getElementById('run-warmup-distance').value = target.running?.warmup?.distance || '';
+            document.getElementById('run-warmup-notes').value = target.running?.warmup?.notes || '';
+            const runWarmup = document.getElementById('run-warmup-section');
+            if (runWarmup) runWarmup.open = !!(target.running?.warmup?.duration || target.running?.warmup?.distance || target.running?.warmup?.notes);
             const tbody = qs('#run-splits-table tbody');
             tbody.innerHTML = '';
             const splits = Array.isArray(target.running?.splits) ? target.running.splits : [];
@@ -1757,6 +1928,12 @@
             recalcRunTotals();
         } else if (type === 'weightlifting') {
             document.getElementById('lift-duration').value = target.lifting?.duration || '';
+            const warmupContainer = document.getElementById('lift-warmup-exercises-container');
+            if (warmupContainer) warmupContainer.innerHTML = '';
+            const warmupExercises = Array.isArray(target.lifting?.warmup) ? target.lifting.warmup : [];
+            warmupExercises.forEach((ex) => addWarmupExercise(ex));
+            const liftWarmup = document.getElementById('lift-warmup-section');
+            if (liftWarmup) liftWarmup.open = warmupExercises.length > 0;
             const container = document.getElementById('lift-exercises-container');
             container.innerHTML = '';
             const exercises = Array.isArray(target.lifting?.exercises) ? target.lifting.exercises : [];
@@ -1801,6 +1978,10 @@
         } else {
             document.getElementById('other-activity').value = target.other?.activity || '';
             document.getElementById('other-duration').value = target.other?.duration || '';
+            const otherContainer = document.getElementById('other-exercises-container');
+            if (otherContainer) otherContainer.innerHTML = '';
+            const exercises = Array.isArray(target.other?.exercises) ? target.other.exercises : [];
+            exercises.forEach((ex) => addOtherExercise(ex));
         }
 
         checkLogReadiness();
@@ -1813,7 +1994,7 @@
         checkLogReadiness();
     };
 
-    function saveSession() {
+    async function saveSession() {
         let type = getSelectedRadio('log-type');
         let title = document.getElementById('log-title').value.trim() || 'Training Session';
         
@@ -1832,6 +2013,7 @@
             pbDetails: [],
             updatedAt: new Date().toISOString()
         };
+        const wasEditing = !!editingSessionId;
         if(type === 'running') {
             if (typeof recalcRunTotals === 'function') recalcRunTotals();
             let dataRows = qsa('#run-splits-table tbody tr.split-data-row');
@@ -1863,6 +2045,14 @@
                 unit: 'm',
                 splits: splits
             };
+            const runningWarmup = {
+                duration: document.getElementById('run-warmup-duration').value.trim(),
+                distance: document.getElementById('run-warmup-distance').value.trim(),
+                notes: document.getElementById('run-warmup-notes').value.trim()
+            };
+            if (runningWarmup.duration || runningWarmup.distance || runningWarmup.notes) {
+                sess.running.warmup = runningWarmup;
+            }
         } else if(type === 'weightlifting') {
             let exs = qsa('.lift-ex-card').map(card => {
                 let sRows = card.querySelectorAll('tbody tr.set-data-row');
@@ -1889,13 +2079,49 @@
             
             sess.lifting = {
                 duration: document.getElementById('lift-duration').value,
-                exercises: exs
+                exercises: exs,
+                warmup: collectLiftWarmupExercises()
             };
         } else {
-            sess.other = { activity: document.getElementById('other-activity').value, duration: document.getElementById('other-duration').value };
+            sess.other = {
+                activity: document.getElementById('other-activity').value,
+                duration: document.getElementById('other-duration').value,
+                exercises: collectOtherExercises()
+            };
         }
 
-        if (editingSessionId) {
+        if (wasEditing && currentUser) {
+            try {
+                const payload = {
+                    date: sess.date,
+                    time: sess.time,
+                    title: sess.title,
+                    type: sess.type,
+                    notes: sess.notes,
+                    readiness_score: sess.readinessScore,
+                    has_pb: sess.hasPB,
+                    pb_details: sess.pbDetails,
+                    running_data: sess.running || null,
+                    lifting_data: sess.lifting || null,
+                    other_data: sess.other || null,
+                    updated_at: sess.updatedAt || new Date().toISOString()
+                };
+                const { error } = await sbClient
+                    .from('training_sessions')
+                    .update(payload)
+                    .eq('user_id', currentUser.id)
+                    .eq('id', sess.id);
+                if (error) {
+                    showToast('Update failed: ' + error.message, 'danger');
+                    return;
+                }
+            } catch (e) {
+                showToast('Update failed: ' + (e?.message || 'Unknown error'), 'danger');
+                return;
+            }
+        }
+
+        if (wasEditing) {
             const idx = appState.sessions.findIndex((s) => sessionIdValue(s) === editingSessionId);
             if (idx >= 0) appState.sessions[idx] = sess;
             else appState.sessions.unshift(sess);
@@ -1908,15 +2134,19 @@
         if (!currentUser) {
             sess._pendingSync = true;
             showToast('Not signed in — session saved locally only. Sign in to sync.', 'warning');
+        } else if (!wasEditing) {
+            await pushSession(sess); // create path
         }
-        pushSession(sess); // sync to cloud
         pushProfile();
         
         if(sess.hasPB) {
             confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, zIndex: 1000 });
         }
         
-        const wasEditing = !!editingSessionId;
+        if (currentUser) {
+            await loadSessions();
+        }
+
         setSessionEditState(null);
         resetLogForm();
         renderSessionList();
@@ -1941,12 +2171,22 @@
         document.getElementById('run-total-time').dataset.secs = 0;
         document.getElementById('run-total-time').dataset.restSecs = 0;
         document.querySelector('#run-splits-table tbody').innerHTML = '';
+        document.getElementById('run-warmup-duration').value = '';
+        document.getElementById('run-warmup-distance').value = '';
+        document.getElementById('run-warmup-notes').value = '';
         document.getElementById('lift-duration').value = '';
+        document.getElementById('lift-warmup-exercises-container').innerHTML = '';
         document.getElementById('lift-exercises-container').innerHTML = '';
         document.getElementById('other-activity').value = '';
         document.getElementById('other-duration').value = '';
+        document.getElementById('other-exercises-container').innerHTML = '';
+        const runWarmupSection = document.getElementById('run-warmup-section');
+        if (runWarmupSection) runWarmupSection.open = false;
+        const liftWarmupSection = document.getElementById('lift-warmup-section');
+        if (liftWarmupSection) liftWarmupSection.open = false;
         updateRunCalcs();
     }
+
 
     function checkAndUpdatePBs(sess, state = appState) {
         if (!state.personalBests) state.personalBests = { track: {}, gym: {} };
@@ -2012,7 +2252,7 @@
         
         appState.sessions.forEach(s => {
             let el = document.createElement('div');
-            el.className = 'log-item';
+            el.className = 'log-item log-session-card';
             let icon = (s.type === 'running') ? '🏃' : (s.type === 'weightlifting') ? '🏋️' : '○';
 
             const header = document.createElement('div');
@@ -2053,45 +2293,88 @@
             const typeText = `Type: ${s.type || 'training'}`;
             meta.appendChild(document.createTextNode(s.readinessScore != null ? ` • ${typeText}` : typeText));
 
+            const details = document.createElement('div');
+            details.style.fontSize = '0.8rem';
+            details.style.color = 'var(--text-muted)';
+            details.style.display = 'flex';
+            details.style.flexDirection = 'column';
+            details.style.gap = '4px';
+            if (s.type === 'running' && s.running?.warmup) {
+                const w = s.running.warmup;
+                const summary = [
+                    w.duration ? `Duration ${w.duration}` : '',
+                    w.distance ? `Distance ${w.distance}` : '',
+                    w.notes ? w.notes : ''
+                ].filter(Boolean).join(' • ');
+                if (summary) {
+                    const line = document.createElement('div');
+                    line.textContent = `Warmup: ${summary}`;
+                    details.appendChild(line);
+                }
+            } else if (s.type === 'weightlifting' && Array.isArray(s.lifting?.warmup) && s.lifting.warmup.length > 0) {
+                const line = document.createElement('div');
+                line.textContent = `Warmup: ${s.lifting.warmup.length} exercise${s.lifting.warmup.length === 1 ? '' : 's'}`;
+                details.appendChild(line);
+            } else if (s.type === 'other') {
+                if (Array.isArray(s.other?.exercises) && s.other.exercises.length > 0) {
+                    const line = document.createElement('div');
+                    line.textContent = `Exercises: ${s.other.exercises.length}`;
+                    details.appendChild(line);
+                }
+            }
+
+            const actions = document.createElement('div');
+            actions.className = 'session-actions card-row';
             const delBtn = document.createElement('button');
-            delBtn.style.border = 'none';
+            delBtn.style.borderColor = 'var(--danger)';
             delBtn.style.color = 'var(--danger)';
-            delBtn.style.background = 'none';
-            delBtn.style.textAlign = 'left';
-            delBtn.style.fontSize = '0.8rem';
-            delBtn.style.padding = '0';
-            delBtn.style.minHeight = 'unset';
-            delBtn.style.display = 'inline';
             delBtn.textContent = 'Delete';
             delBtn.dataset.sessionId = sessionIdValue(s);
             delBtn.className = 'delete-session-btn';
+            const editBtn = document.createElement('button');
+            editBtn.textContent = 'Edit';
+            editBtn.dataset.sessionEditId = sessionIdValue(s);
+            editBtn.className = 'edit-session-btn';
 
             el.appendChild(header);
             el.appendChild(meta);
-            el.appendChild(delBtn);
+            if (details.children.length > 0) el.appendChild(details);
+            actions.appendChild(editBtn);
+            actions.appendChild(delBtn);
+            el.appendChild(actions);
             c.appendChild(el);
         });
     }
 
     window.deleteSession = async function(id) {
         const confirmed = await showConfirm("Delete this session forever?", { title: 'Delete session', confirmText: 'Delete' });
-        if(confirmed) {
-            appState.sessions = appState.sessions.filter(s => sessionIdValue(s) !== id);
-            recomputePersonalBestsFromSessions();
-            if (currentUser) {
-                try {
-                    const query = sbClient.from('training_sessions');
-                    if (query.delete) await query.delete().eq('user_id', currentUser.id).eq('id', id);
-                } catch(e) { console.warn('Cloud session delete failed', e); }
+        if(!confirmed) return;
+        if (currentUser) {
+            try {
+                const { error } = await sbClient
+                    .from('training_sessions')
+                    .delete()
+                    .eq('user_id', currentUser.id)
+                    .eq('id', id);
+                if (error) {
+                    showToast('Delete failed: ' + error.message, 'danger');
+                    return;
+                }
+            } catch(e) {
+                showToast('Delete failed: ' + (e?.message || 'Unknown error'), 'danger');
+                return;
             }
-            if (editingSessionId === id) setSessionEditState(null);
-            renderSessionList();
-            renderPBsGym(); renderPBsTrack();
-            renderHistory();
-            if(typeof currentCalYear !== 'undefined') renderCalendar(currentCalYear, currentCalMonth);
-            pushProfile();
-            showToast('Session deleted.', 'success');
         }
+        appState.sessions = appState.sessions.filter(s => sessionIdValue(s) !== id);
+        recomputePersonalBestsFromSessions();
+        if (currentUser) await loadSessions();
+        if (editingSessionId === id) setSessionEditState(null);
+        renderSessionList();
+        renderPBsGym(); renderPBsTrack();
+        renderHistory();
+        if(typeof currentCalYear !== 'undefined') renderCalendar(currentCalYear, currentCalMonth);
+        pushProfile();
+        showToast('Session deleted.', 'success');
     };
 
     async function deleteMeasurement(id) {
@@ -2574,6 +2857,14 @@
                             let runBlock = document.createElement('div');
                             renderIfPresent(runBlock, 'Total Distance', distDisplay);
                             renderIfPresent(runBlock, 'Total Time', durDisplay);
+                            if (s.running.warmup && typeof s.running.warmup === 'object') {
+                                const warmSummary = [
+                                    s.running.warmup.duration ? `Duration ${s.running.warmup.duration}` : '',
+                                    s.running.warmup.distance ? `Distance ${s.running.warmup.distance}` : '',
+                                    s.running.warmup.notes || ''
+                                ].filter(Boolean).join(' | ');
+                                if (warmSummary) renderIfPresent(runBlock, 'Warmup', warmSummary);
+                            }
                             
                             if (Array.isArray(s.running.splits) && s.running.splits.length > 0) {
                                 let splitsTitle = document.createElement('div');
@@ -2618,6 +2909,12 @@
                         } else if (s.type === 'weightlifting' && s.lifting) {
                             let liftBlock = document.createElement('div');
                             renderIfPresent(liftBlock, 'Duration', s.lifting.duration);
+                            appendExerciseSummaryList(
+                                liftBlock,
+                                'Warmup',
+                                s.lifting.warmup,
+                                (warm) => `${warm.name || 'Exercise'}: ${Number(warm.weight) || 0}kg × ${Number(warm.reps) || 0}`
+                            );
                             
                             if (Array.isArray(s.lifting.exercises) && s.lifting.exercises.length > 0) {
                                 let exTitle = document.createElement('div');
@@ -2670,6 +2967,12 @@
                             const otherDuration = formatTimeLength(parseTime(s.other.duration));
                             renderIfPresent(otherBlock, 'Activity', s.other.activity || 'Unknown');
                             renderIfPresent(otherBlock, 'Duration', otherDuration);
+                            appendExerciseSummaryList(
+                                otherBlock,
+                                'Exercises',
+                                s.other.exercises,
+                                (ex) => `${ex.name || 'Exercise'}: ${Number(ex.sets) || 0} sets × ${Number(ex.reps) || 0} reps @ ${Number(ex.weight) || 0}kg`
+                            );
                             det.appendChild(otherBlock);
                         }
                         

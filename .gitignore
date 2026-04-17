@@ -6,3 +6,4 @@
 !.env.example
 .env
 public/config.js
+node_modules/
