@@ -1,7 +1,7 @@
     // --- SUPABASE CLIENT ---
     // Runtime config expected from hosting shell (e.g. set in a small config script before app.js).
-    const SUPABASE_URL = window.__SUPABASE_URL__ || 'https://lkbexgqclzodqllfemix.supabase.co';
-    const SUPABASE_KEY = window.__SUPABASE_ANON_KEY__ || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxrYmV4Z3FjbHpvZHFsbGZlbWl4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU3NjE3NjEsImV4cCI6MjA5MTMzNzc2MX0.LikIfvtMf-XlU9SAb1j-uBpKxn93p724AIoqfnG9B-E';
+    const SUPABASE_URL = window.__SUPABASE_URL__;
+    const SUPABASE_KEY = window.__SUPABASE_ANON_KEY__;
     let sbClient = null;
     try {
         const { createClient } = window.supabase;
@@ -26,19 +26,21 @@
         };
     }
     let currentUser = null;
-    let lastSyncAt = Number(localStorage.getItem('omegahrv_last_synced_at')) || 0;
+    let lastSyncAt = 0;
     let lastVisibilitySyncAt = 0;
     const MINUTE_IN_MS = 60000;
     const VISIBILITY_SYNC_DEBOUNCE_MS = 30000;
+    const APP_SCHEMA_VERSION = 1;
     let syncDownPromise = null;
 
     // --- STATE ---
+    const DEFAULT_SETTINGS = { name: '', age: '', initDuration: '60', duration: '180', lightMode: false };
     let appState = {
-        measurements: JSON.parse(localStorage.getItem('omegahrv_measurements')) || [],
-        settings: JSON.parse(localStorage.getItem('omegahrv_settings')) || { name: '', age: '', initDuration: '60', duration: '180', lightMode: false },
-        onboarded: localStorage.getItem('omegahrv_onboarded') === 'true',
-        sessions: JSON.parse(localStorage.getItem('omegahrv_sessions')) || [],
-        personalBests: JSON.parse(localStorage.getItem('omegahrv_pbs')) || { track: {}, gym: {} }
+        measurements: [],
+        settings: { ...DEFAULT_SETTINGS },
+        onboarded: false,
+        sessions: [],
+        personalBests: { track: {}, gym: {} }
     };
 
     const qs = (sel, ctx=document) => ctx.querySelector(sel);
@@ -88,6 +90,82 @@
         });
     }
 
+    function showInputModal({ title = 'Input', fields = [], onConfirm = () => {} }) {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay active';
+
+        const card = document.createElement('div');
+        card.className = 'modal-card';
+
+        const heading = document.createElement('h3');
+        heading.textContent = String(title);
+        card.appendChild(heading);
+
+        const body = document.createElement('div');
+        body.className = 'modal-inputs';
+
+        fields.forEach((field) => {
+            const group = document.createElement('div');
+            group.className = 'modal-input-group';
+
+            const label = document.createElement('label');
+            label.setAttribute('for', `modal-input-${field.id}`);
+            label.textContent = String(field.label || field.id || 'Field');
+
+            const input = document.createElement('input');
+            input.id = `modal-input-${field.id}`;
+            input.type = field.type || 'text';
+            input.placeholder = field.placeholder || '';
+            input.value = field.defaultValue == null ? '' : String(field.defaultValue);
+
+            group.appendChild(label);
+            group.appendChild(input);
+            body.appendChild(group);
+        });
+
+        card.appendChild(body);
+
+        const actions = document.createElement('div');
+        actions.className = 'modal-actions';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.textContent = 'Cancel';
+
+        const confirmBtn = document.createElement('button');
+        confirmBtn.className = 'primary';
+        confirmBtn.textContent = 'Confirm';
+
+        actions.appendChild(cancelBtn);
+        actions.appendChild(confirmBtn);
+        card.appendChild(actions);
+        overlay.appendChild(card);
+        document.body.appendChild(overlay);
+
+        const close = () => {
+            confirmBtn.removeEventListener('click', handleConfirm);
+            cancelBtn.removeEventListener('click', handleCancel);
+            overlay.remove();
+        };
+
+        const handleCancel = () => close();
+
+        const handleConfirm = () => {
+            const values = {};
+            fields.forEach((field) => {
+                const input = document.getElementById(`modal-input-${field.id}`);
+                values[field.id] = input ? input.value : '';
+            });
+            onConfirm(values);
+            close();
+        };
+
+        confirmBtn.addEventListener('click', handleConfirm, { once: true });
+        cancelBtn.addEventListener('click', handleCancel, { once: true });
+
+        const firstInput = card.querySelector('input');
+        if (firstInput) firstInput.focus();
+    }
+
     function destroyChartSafe(chartRefName) {
         if (chartRefName && typeof chartRefName.destroy === 'function') {
             try { chartRefName.destroy(); } catch (e) { console.warn('Chart destroy failed', e); }
@@ -124,6 +202,53 @@
         if (s._stableId) return s._stableId;
         s._stableId = fallbackEntityId(s, 'session');
         return s._stableId;
+    }
+
+    function readJsonStorage(key, fallback) {
+        try {
+            const raw = localStorage.getItem(key);
+            if (!raw) return fallback;
+            const parsed = JSON.parse(raw);
+            return parsed ?? fallback;
+        } catch {
+            return fallback;
+        }
+    }
+
+    function migrateLocalStorage() {
+        let schemaVersion = Number.parseInt(localStorage.getItem('omegahrv_schema_version') || '0', 10);
+        if (!Number.isFinite(schemaVersion) || schemaVersion < 0) schemaVersion = 0;
+        const fromVersion = schemaVersion;
+
+        while (schemaVersion < APP_SCHEMA_VERSION) {
+            if (schemaVersion === 0) {
+                const measurements = readJsonStorage('omegahrv_measurements', []);
+                const sessions = readJsonStorage('omegahrv_sessions', []);
+
+                const migratedMeasurements = measurements.map((m) => ({ ...m, id: fallbackMeasurementId(m) }));
+                const migratedSessions = sessions.map((s) => ({ ...s, id: sessionIdValue({ ...s }) }));
+
+                localStorage.setItem('omegahrv_measurements', JSON.stringify(migratedMeasurements));
+                localStorage.setItem('omegahrv_sessions', JSON.stringify(migratedSessions));
+                schemaVersion = 1;
+                console.log(`[Migration] Migrated from v0 to v1`);
+                continue;
+            }
+            break;
+        }
+
+        if (fromVersion < APP_SCHEMA_VERSION) {
+            localStorage.setItem('omegahrv_schema_version', String(APP_SCHEMA_VERSION));
+        }
+    }
+
+    function hydrateAppStateFromLocalStorage() {
+        appState.measurements = readJsonStorage('omegahrv_measurements', []);
+        appState.settings = readJsonStorage('omegahrv_settings', { ...DEFAULT_SETTINGS });
+        appState.onboarded = localStorage.getItem('omegahrv_onboarded') === 'true';
+        appState.sessions = readJsonStorage('omegahrv_sessions', []);
+        appState.personalBests = readJsonStorage('omegahrv_pbs', { track: {}, gym: {} });
+        lastSyncAt = Number(localStorage.getItem('omegahrv_last_synced_at')) || 0;
     }
     
     function toggleSidebar() {
@@ -360,13 +485,21 @@
 
     function mergeByLatest(localArr, cloudArr, prefix = 'legacy') {
         const merged = new Map();
-        [...localArr, ...cloudArr].forEach((item) => {
+        const taggedLocal = localArr.map((item) => ({ ...item, _mergeSource: 'local' }));
+        const taggedCloud = cloudArr.map((item) => ({ ...item, _mergeSource: 'cloud' }));
+        [...taggedLocal, ...taggedCloud].forEach((item) => {
             const id = item.id || fallbackEntityId(item, prefix);
             const current = merged.get(id);
             const normalized = { ...item, id };
-            if (!current || tsValue(normalized) > tsValue(current)) merged.set(id, normalized);
+            const nextTs = tsValue(normalized);
+            const currentTs = tsValue(current);
+            const nextSourceRank = normalized._mergeSource === 'cloud' ? 1 : 0;
+            const currentSourceRank = current?._mergeSource === 'cloud' ? 1 : 0;
+            if (!current || nextTs > currentTs || (nextTs === currentTs && nextSourceRank >= currentSourceRank)) {
+                merged.set(id, normalized);
+            }
         });
-        return [...merged.values()];
+        return [...merged.values()].map(({ _mergeSource, ...item }) => item);
     }
 
     function compareMeasurementDateAsc(a, b) {
@@ -398,10 +531,8 @@
                 rrCount: m.rr_count,
                 updatedAt: m.updated_at || m.date
             }));
-            appState.measurements = cloudMeasurements.length > appState.measurements.length
-                ? cloudMeasurements
-                : mergeByLatest(appState.measurements, cloudMeasurements, 'measurement');
-            appState.measurements = appState.measurements.sort(compareMeasurementDateAsc);
+            appState.measurements = mergeByLatest(appState.measurements, cloudMeasurements, 'measurement')
+                .sort(compareMeasurementDateAsc);
             localStorage.setItem('omegahrv_measurements', JSON.stringify(appState.measurements));
         }
 
@@ -423,10 +554,8 @@
                 other: s.other_data,
                 updatedAt: s.updated_at || `${s.date}T${s.time || '00:00'}:00Z`
             }));
-            appState.sessions = cloudSessions.length > appState.sessions.length
-                ? cloudSessions
-                : mergeByLatest(appState.sessions, cloudSessions, 'session');
-            appState.sessions = appState.sessions.sort(compareSessionDateTimeDesc);
+            appState.sessions = mergeByLatest(appState.sessions, cloudSessions, 'session')
+                .sort(compareSessionDateTimeDesc);
             localStorage.setItem('omegahrv_sessions', JSON.stringify(appState.sessions));
         }
 
@@ -567,6 +696,8 @@
 
     // --- INITIALIZATION ---
     document.addEventListener("DOMContentLoaded", async () => {
+        migrateLocalStorage();
+        hydrateAppStateFromLocalStorage();
         updateLastSyncedLabel();
         setInterval(updateLastSyncedLabel, MINUTE_IN_MS);
         document.addEventListener('visibilitychange', handleVisibilitySync);
@@ -1136,111 +1267,14 @@
             bleState.device.gatt.disconnect();
         }
     }
-
     // --- HRV MATHEMATICS ---
+    const hrvModulePromise = import('./hrv.js');
 
-    function filterRR(rawArr) {
-        let filtered = [];
-        let rejects = 0;
-        for (let i = 0; i < rawArr.length; i++) {
-            let rr = rawArr[i];
-            if (rr >= 300 && rr <= 2000) {
-                if (filtered.length === 0) {
-                    filtered.push(rr);
-                } else {
-                    let prev = filtered[filtered.length - 1];
-                    let diffPerc = Math.abs(rr - prev) / prev;
-                    if (diffPerc <= 0.20) { // Reject > 20% ectopic change
-                        filtered.push(rr);
-                        rejects = 0;
-                    } else {
-                        rejects++;
-                        // If we reject 2 or more consecutive beats, our baseline is likely anomalous. Add the current beat and reset baseline.
-                        if (rejects >= 2) {
-                            filtered.push(rr);
-                            rejects = 0;
-                        }
-                    }
-                }
-            }
-        }
-        return filtered;
-    }
-
-    function computeHRV(rrArray) {
-        const n = rrArray.length;
-        if (n < 2) return null;
-
-        let totalRR = 0, sumSqDiff = 0, pnn50Count = 0;
-        
-        for (let i = 0; i < n; i++) totalRR += rrArray[i];
-        
-        for (let i = 1; i < n; i++) {
-            let diff = Math.abs(rrArray[i] - rrArray[i - 1]);
-            sumSqDiff += diff * diff;
-            if (diff > 50) pnn50Count++;
-        }
-
-        let meanRR = totalRR / n;
-        let meanHR = 60000 / meanRR;
-        let rmssd = Math.sqrt(sumSqDiff / (n - 1));
-        let pnn50 = (pnn50Count / (n - 1)) * 100;
-
-        let sumSqDrr = 0;
-        for (let i = 0; i < n; i++) sumSqDrr += Math.pow(rrArray[i] - meanRR, 2);
-        let sdnn = Math.sqrt(sumSqDrr / (n - 1));
-
-        // Baevsky Stress Index (50ms bins)
-        let bins = {};
-        let maxRR = -Infinity;
-        let minRR = Infinity;
-
-        rrArray.forEach(rr => {
-            let binIdx = Math.floor(rr / 50) * 50;
-            bins[binIdx] = (bins[binIdx] || 0) + 1;
-            if (rr > maxRR) maxRR = rr;
-            if (rr < minRR) minRR = rr;
-        });
-
-        let maxBinCount = 0;
-        let modeBinIdx = 0;
-        for (let bin in bins) {
-            if (bins[bin] > maxBinCount) {
-                maxBinCount = bins[bin];
-                modeBinIdx = parseInt(bin);
-            }
-        }
-
-        let mo = (modeBinIdx + 25) / 1000; // mid of bin in secs
-        let amo = (maxBinCount / n) * 100; // percentage
-        let mxdmn = (maxRR - minRR) / 1000; // variation sweep in secs
-        
-        let si = 0;
-        if (mxdmn > 0 && mo > 0) {
-            si = amo / (2 * mo * mxdmn);
-        }
-
-        return { rmssd, sdnn, pnn50, meanHR, stressIndex: si, rrCount: n };
-    }
-
-    function calcReadiness(rmssd) {
-        // Use a wider baseline (28 days) so score is less noisy day-to-day.
-        let baselineWindow = appState.measurements.slice(-28);
-        if (baselineWindow.length === 0) return 50;
-        let baseline = baselineWindow.reduce((sum, m) => sum + m.rmssd, 0) / baselineWindow.length;
-        if (!baseline || baseline <= 0) return 50;
-        // Confidence ramps up during first week: start near neutral (50), then trust baseline more.
-        let confidenceFactor = Math.min(1, baselineWindow.length / 7);
-        // 70 anchors "equal to baseline" to an actionable-but-not-max readiness zone.
-        let raw = (rmssd / baseline) * 70;
-        let score = raw * confidenceFactor + (50 * (1 - confidenceFactor));
-        return Math.max(0, Math.min(100, Math.round(score)));
-    }
-
-    function finishMeasurement() {
+    async function finishMeasurement() {
         stopBLE();
         document.getElementById('measure-active').style.display = 'none';
 
+        const { filterRR, computeHRV, calcReadiness } = await hrvModulePromise;
         let cleanRR = filterRR(bleState.rawRRs);
         if (cleanRR.length < 10) {
             showToast(`Not enough valid data (${cleanRR.length}/${bleState.rawRRs.length}). Ensure straps are moist and retry.`, 'warning');
@@ -1249,7 +1283,7 @@
         }
 
         let hrv = computeHRV(cleanRR);
-        let readiness = calcReadiness(hrv.rmssd);
+        let readiness = calcReadiness(hrv.rmssd, appState.measurements);
 
         bleState.lastResult = {
             date: new Date().toISOString(),
@@ -1687,7 +1721,7 @@
             if (dCmp !== 0) return dCmp;
             return (a.time || '').localeCompare(b.time || '');
         });
-        ordered.forEach((s) => checkAndUpdatePBs(s));
+        ordered.forEach((s) => checkAndUpdatePBs(s, appState));
         localStorage.setItem('omegahrv_pbs', JSON.stringify(appState.personalBests));
         localStorage.setItem('omegahrv_sessions', JSON.stringify(appState.sessions));
     }
@@ -1914,7 +1948,14 @@
         updateRunCalcs();
     }
 
-    function checkAndUpdatePBs(sess) {
+    function checkAndUpdatePBs(sess, state = appState) {
+        if (!state.personalBests) state.personalBests = { track: {}, gym: {} };
+        if (!state.personalBests.track) state.personalBests.track = {};
+        if (!state.personalBests.gym) state.personalBests.gym = {};
+        sess.hasPB = false;
+        if (!Array.isArray(sess.pbDetails)) sess.pbDetails = [];
+        else sess.pbDetails = [];
+
         if(sess.type === 'running' && sess.running) {
             let checkDist = (distM, t) => {
                 if(distM <= 0 || t <= 0) return;
@@ -1926,9 +1967,9 @@
                 if(Math.abs(distM - 1609) < 30) k = "1 Mile";
                 if(!k) k = Math.round(distM) + "m";
                 
-                let existing = appState.personalBests.track[k];
+                let existing = state.personalBests.track[k];
                 if(!existing || t < existing.time) {
-                    appState.personalBests.track[k] = { time: t, date: sess.date, speed: distM/t };
+                    state.personalBests.track[k] = { time: t, date: sess.date, speed: distM/t };
                     sess.hasPB = true;
                     sess.pbDetails.push(`${k} in ${formatSecondsMetric(t)}`);
                 }
@@ -1942,9 +1983,9 @@
                     if(s.load > 0 && s.reps > 0 && s.type !== 'warmup') {
                         let e1rm = s.load * (1 + s.reps/30);
                         let k = ex.name;
-                        let existing = appState.personalBests.gym[k];
+                        let existing = state.personalBests.gym[k];
                         if(!existing || Object.keys(existing).length === 0) {
-                            appState.personalBests.gym[k] = { e1rm: e1rm, load: s.load, reps: s.reps, date: sess.date, peak: s.peakPower };
+                            state.personalBests.gym[k] = { e1rm: e1rm, load: s.load, reps: s.reps, date: sess.date, peak: s.peakPower };
                             sess.hasPB = true;
                             sess.pbDetails.push(`${k} e1RM: ${Math.round(e1rm)}kg`);
                         } else {
@@ -1960,7 +2001,7 @@
             });
         }
         
-        if(sess.hasPB) localStorage.setItem('omegahrv_pbs', JSON.stringify(appState.personalBests));
+        if(sess.hasPB && state === appState) localStorage.setItem('omegahrv_pbs', JSON.stringify(state.personalBests));
     }
 
     // --- RENDERING VIEWS ---
@@ -2070,55 +2111,82 @@
     }
 
     function addCustomTrackPB() {
-        let d = prompt("Enter custom distance (e.g., '55m' or 'Marathon'):");
-        if(d) {
-            if(!appState.personalBests.track[d]) {
-                appState.personalBests.track[d] = null;
-                renderPBsTrack();
+        showInputModal({
+            title: 'Add custom distance',
+            fields: [
+                { id: 'distance', label: 'Distance (e.g. 55m or Marathon)', type: 'text', placeholder: '55m', defaultValue: '' }
+            ],
+            onConfirm: ({ distance }) => {
+                const d = (distance || '').trim();
+                if (!d) return;
+                if (!appState.personalBests.track[d]) {
+                    appState.personalBests.track[d] = null;
+                    renderPBsTrack();
+                }
             }
-        }
+        });
     }
 
     function editTrackPB(distanceKey) {
         const current = appState.personalBests.track?.[distanceKey];
         if (!current) return;
-        const nextTime = parseFloat(prompt(`Edit best time for ${distanceKey} (seconds)`, String(current.time ?? '')));
-        if (!Number.isFinite(nextTime) || nextTime <= 0) return;
-        const nextDate = (prompt(`Edit date for ${distanceKey} (YYYY-MM-DD)`, current.date || '') || '').trim();
-        const parsedDist = parseFloat(distanceKey);
-        appState.personalBests.track[distanceKey] = {
-            ...current,
-            time: nextTime,
-            date: nextDate || current.date || '',
-            speed: Number.isFinite(parsedDist) && parsedDist > 0 ? parsedDist / nextTime : (current.speed || null)
-        };
-        localStorage.setItem('omegahrv_pbs', JSON.stringify(appState.personalBests));
-        renderPBsTrack();
-        pushProfile();
-        showToast('Track PR updated.', 'success');
+        showInputModal({
+            title: `Edit track PR: ${distanceKey}`,
+            fields: [
+                { id: 'time', label: 'Time (seconds)', type: 'number', placeholder: '0', defaultValue: String(current.time ?? '') },
+                { id: 'date', label: 'Date', type: 'date', placeholder: '', defaultValue: current.date || '' }
+            ],
+            onConfirm: ({ time, date }) => {
+                const nextTime = parseFloat(time);
+                if (!Number.isFinite(nextTime) || nextTime <= 0) return;
+                const nextDate = (date || '').trim();
+                const parsedDist = parseFloat(distanceKey);
+                appState.personalBests.track[distanceKey] = {
+                    ...current,
+                    time: nextTime,
+                    date: nextDate || current.date || '',
+                    speed: Number.isFinite(parsedDist) && parsedDist > 0 ? parsedDist / nextTime : (current.speed || null)
+                };
+                localStorage.setItem('omegahrv_pbs', JSON.stringify(appState.personalBests));
+                renderPBsTrack();
+                pushProfile();
+                showToast('Track PR updated.', 'success');
+            }
+        });
     }
 
     function editGymPB(exerciseKey) {
         const current = appState.personalBests.gym?.[exerciseKey];
         if (!current) return;
-        const e1rm = parseFloat(prompt(`Edit best e1RM for ${exerciseKey} (kg)`, String(current.e1rm ?? '')));
-        if (!Number.isFinite(e1rm) || e1rm <= 0) return;
-        const load = parseFloat(prompt(`Edit best load for ${exerciseKey} (kg)`, String(current.load ?? '')));
-        if (!Number.isFinite(load) || load <= 0) return;
-        const reps = parseInt(prompt(`Edit reps for ${exerciseKey}`, String(current.reps ?? '')), 10);
-        if (!Number.isFinite(reps) || reps <= 0) return;
-        const nextDate = (prompt(`Edit date for ${exerciseKey} (YYYY-MM-DD)`, current.date || '') || '').trim();
-        appState.personalBests.gym[exerciseKey] = {
-            ...current,
-            e1rm,
-            load,
-            reps,
-            date: nextDate || current.date || ''
-        };
-        localStorage.setItem('omegahrv_pbs', JSON.stringify(appState.personalBests));
-        renderPBsGym();
-        pushProfile();
-        showToast('Gym PR updated.', 'success');
+        showInputModal({
+            title: `Edit gym PR: ${exerciseKey}`,
+            fields: [
+                { id: 'e1RM', label: 'e1RM (kg)', type: 'number', placeholder: '0', defaultValue: String(current.e1rm ?? '') },
+                { id: 'load', label: 'Load (kg)', type: 'number', placeholder: '0', defaultValue: String(current.load ?? '') },
+                { id: 'reps', label: 'Reps', type: 'number', placeholder: '0', defaultValue: String(current.reps ?? '') },
+                { id: 'date', label: 'Date', type: 'date', placeholder: '', defaultValue: current.date || '' }
+            ],
+            onConfirm: ({ e1RM, load, reps, date }) => {
+                const e1rm = parseFloat(e1RM);
+                if (!Number.isFinite(e1rm) || e1rm <= 0) return;
+                const nextLoad = parseFloat(load);
+                if (!Number.isFinite(nextLoad) || nextLoad <= 0) return;
+                const nextReps = parseInt(reps, 10);
+                if (!Number.isFinite(nextReps) || nextReps <= 0) return;
+                const nextDate = (date || '').trim();
+                appState.personalBests.gym[exerciseKey] = {
+                    ...current,
+                    e1rm,
+                    load: nextLoad,
+                    reps: nextReps,
+                    date: nextDate || current.date || ''
+                };
+                localStorage.setItem('omegahrv_pbs', JSON.stringify(appState.personalBests));
+                renderPBsGym();
+                pushProfile();
+                showToast('Gym PR updated.', 'success');
+            }
+        });
     }
 
     async function deleteTrackPB(distanceKey) {
