@@ -9,6 +9,9 @@
             --danger: #ff7b72;
             --warning: #d29922;
             --success: #238636;
+            --accent-contrast: #ffffff;
+            --picker-icon-filter: invert(74%) sepia(11%) saturate(333%) hue-rotate(164deg) brightness(95%) contrast(88%);
+            --segmented-inactive-text: #aeb7c2;
         }
 
         body.light-mode {
@@ -22,6 +25,9 @@
             --danger: #b42318;
             --warning: #9a6700;
             --success: #1f883d;
+            --accent-contrast: #ffffff;
+            --picker-icon-filter: none;
+            --segmented-inactive-text: #4f5a66;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
@@ -187,11 +193,7 @@
         input[type="time"]::-webkit-calendar-picker-indicator {
             opacity: 1;
             cursor: pointer;
-            filter: invert(74%) sepia(11%) saturate(333%) hue-rotate(164deg) brightness(95%) contrast(88%);
-        }
-        body.light-mode input[type="date"]::-webkit-calendar-picker-indicator,
-        body.light-mode input[type="time"]::-webkit-calendar-picker-indicator {
-            filter: none;
+            filter: var(--picker-icon-filter);
         }
 
         .card {
@@ -399,7 +401,7 @@
             cursor: pointer;
             transition: all 0.2s;
             white-space: nowrap;
-            color: var(--text-main);
+            color: var(--segmented-inactive-text);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -407,7 +409,7 @@
             height: auto;
             overflow: visible;
         }
-        .segmented-control input[type="radio"]:checked + label { background: var(--accent); color: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .segmented-control input[type="radio"]:checked + label { background: var(--accent); color: var(--accent-contrast); box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         #log-type-control {
             flex-wrap: nowrap;
             gap: 4px;
