@@ -2483,7 +2483,7 @@
                                 existing.load = s.load;
                                 existing.reps = s.reps;
                                 sess.hasPB = true;
-                                const alreadyNoted = sess.pbDetails.some(d => d.includes(k));
+                                const alreadyNoted = sess.pbDetails.some((d) => d.startsWith(`${k} e1RM:`));
                                 if (!alreadyNoted) sess.pbDetails.push(`${k} e1RM: ${Math.round(e1rm)}kg`);
                             }
                             if(s.load > (existing.load || 0)) { existing.load = s.load; existing.reps = s.reps; }
