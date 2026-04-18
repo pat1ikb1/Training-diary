@@ -2459,8 +2459,9 @@
                         const isBackSquat = String(ex.name || '').trim().toLowerCase() === 'back squat';
                         let k;
                         if (isBackSquat) {
-                            const rom = Number.isFinite(parseFloat(s.romCm)) && parseFloat(s.romCm) > 0
-                                ? `${Math.round(parseFloat(s.romCm))}cm`
+                            const romValue = parseFloat(s.romCm);
+                            const rom = Number.isFinite(romValue) && romValue > 0
+                                ? `${Math.round(romValue)}cm`
                                 : 'full';
                             k = `Back Squat (ROM: ${rom})`;
                         } else {
