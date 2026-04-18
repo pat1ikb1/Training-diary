@@ -1410,7 +1410,7 @@
     }
 
     // --- DATA EXPORT ---
-    function exportCSV() {
+    function exportMeasurementsCSV() {
         if (appState.measurements.length === 0) return showToast("No data to export.", 'warning');
         
         let headers = "Date,Readiness,RMSSD,SDNN,pNN50,MeanHR,StressIndex,RRCount\n";
@@ -1423,6 +1423,35 @@
         let a = document.createElement('a');
         a.href = url;
         a.download = `OmegaHRV_Export_${new Date().toISOString().split('T')[0]}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    function exportSessionsCSV() {
+        if (appState.sessions.length === 0) return showToast("No sessions to export.", 'warning');
+
+        const escape = (val) => {
+            const s = String(val ?? '').replace(/"/g, '""');
+            return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s}"` : s;
+        };
+
+        const headers = "Date,Time,Title,Type,ReadinessScore,HasPB,PBDetails,Notes\n";
+        const rows = appState.sessions.map(s => [
+            escape(s.date),
+            escape(s.time || ''),
+            escape(s.title || ''),
+            escape(s.type || ''),
+            escape(s.readinessScore ?? ''),
+            escape(s.hasPB ? 'yes' : 'no'),
+            escape(Array.isArray(s.pbDetails) ? s.pbDetails.join('; ') : ''),
+            escape(s.notes || '')
+        ].join(',')).join('\n');
+
+        const blob = new Blob([headers + rows], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `TrainingDiary_Sessions_${new Date().toISOString().split('T')[0]}.csv`;
         a.click();
         URL.revokeObjectURL(url);
     }
@@ -2329,7 +2358,7 @@
             delBtn.style.borderColor = 'var(--danger)';
             delBtn.style.color = 'var(--danger)';
             delBtn.textContent = 'Delete';
-            delBtn.dataset.sessionId = sessionIdValue(s);
+            delBtn.dataset.sessionId = s.id || sessionIdValue(s);
             delBtn.className = 'delete-session-btn';
             const editBtn = document.createElement('button');
             editBtn.textContent = 'Edit';
@@ -2367,7 +2396,6 @@
         }
         appState.sessions = appState.sessions.filter(s => sessionIdValue(s) !== id);
         recomputePersonalBestsFromSessions();
-        if (currentUser) await loadSessions();
         if (editingSessionId === id) setSessionEditState(null);
         renderSessionList();
         renderPBsGym(); renderPBsTrack();
@@ -2384,8 +2412,11 @@
         localStorage.setItem('omegahrv_measurements', JSON.stringify(appState.measurements));
         if (currentUser) {
             try {
-                const query = sbClient.from('measurements');
-                if (query.delete) await query.delete().eq('user_id', currentUser.id).eq('id', id);
+                const { error } = await sbClient.from('measurements')
+                    .delete()
+                    .eq('user_id', currentUser.id)
+                    .eq('id', id);
+                if (error) console.warn('Cloud measurement delete failed', error);
             } catch(e) { console.warn('Cloud measurement delete failed', e); }
         }
         renderHistory();
@@ -2836,7 +2867,7 @@
                         delBtn.style.fontSize = '0.75rem';
                         delBtn.style.color = 'var(--danger)';
                         delBtn.textContent = 'Delete session';
-                        delBtn.dataset.sessionDeleteId = sessionIdValue(s);
+                        delBtn.dataset.sessionDeleteId = s.id || sessionIdValue(s);
                         actions.appendChild(editBtn);
                         actions.appendChild(delBtn);
                         row.appendChild(actions);
