@@ -207,16 +207,22 @@
                 <label for="log-title" style="font-size: 0.85rem; color: var(--text-muted);">Session title</label>
                 <input type="text" id="log-title" placeholder="Session Title...">
                 <div id="log-readiness-badge" class="badge" style="display: none; align-self: flex-start; margin-top: 5px;"></div>
+                <div class="card-row" style="margin-top: 10px; gap: 8px; flex-wrap: wrap;">
+                    <button style="width:auto; min-height:32px; padding:6px 12px; font-size:0.82rem;" onclick="openCopyWarmupPicker()">📋 Copy Warmup From...</button>
+                    <button style="width:auto; min-height:32px; padding:6px 12px; font-size:0.82rem;" onclick="openCopySessionPicker()">⎘ Copy Full Session From...</button>
+                </div>
             </div>
 
             <div id="log-form-running" class="log-form-section active">
                 <details id="run-warmup-section" style="margin-bottom: 15px;">
                     <summary style="cursor:pointer; font-size:1rem; font-weight:600; padding: 8px 0;">🔥 Warmup</summary>
                     <div class="card" style="margin-top:10px;">
-                        <input type="text" id="run-warmup-duration" placeholder="Warmup Duration (mm:ss)">
-                        <input type="text" id="run-warmup-distance" placeholder="Warmup Distance (m)">
+                        <input type="text" id="run-warmup-duration" placeholder="Total Warmup Duration (mm:ss)">
+                        <input type="text" id="run-warmup-distance" placeholder="Total Warmup Distance (m)">
                         <input type="text" id="run-warmup-notes" placeholder="Notes (e.g. drills, strides)">
                     </div>
+                    <div id="run-warmup-exercises-container" style="display: flex; flex-direction: column; gap: 12px; margin-top: 10px;"></div>
+                    <button style="margin-top:8px; width:auto; padding: 6px 12px; font-size: 0.85rem;" onclick="addRunWarmupExercise()">+ Add Warmup Exercise</button>
                 </details>
                 <div class="card">
                     <div class="card-row" style="font-size: 0.85rem; color: var(--text-muted);">
@@ -314,6 +320,11 @@
                         <tbody id="pr-gym-tbody"></tbody>
                     </table>
                 </div>
+                <div style="margin-top: 12px; text-align: center;">
+                    <button style="width:auto; padding:6px 14px; font-size:0.82rem; color:var(--text-muted);" onclick="recomputePersonalBestsFromSessions(); renderPBsGym(); renderPBsTrack(); showToast('PBs recomputed from all sessions.', 'success');">
+                        ↺ Recompute All PBs
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -336,9 +347,9 @@
                 <div class="calendar-grid" id="calendar-days">
                     <!-- days injected here -->
                 </div>
-                <div style="padding: 10px; border-top: 1px solid var(--border); text-align: center;">
-                    <button style="width:auto; padding: 6px 12px; font-size: 0.85rem;" onclick="renderCalendar(new Date().getFullYear(), new Date().getMonth())">Today</button>
-                </div>
+            </div>
+            <div style="padding: 10px; text-align: center; margin-top: 8px;">
+                <button style="width:auto; padding: 6px 16px; font-size: 0.85rem;" onclick="renderCalendar(new Date().getFullYear(), new Date().getMonth())">Today</button>
             </div>
             <p id="cal-hint" style="text-align:center; color:var(--text-muted); font-size:0.85rem; margin-top:12px;">Tap a date to see details</p>
             <div id="calendar-day-details"></div>

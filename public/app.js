@@ -1677,6 +1677,31 @@
         }
     }
 
+    function addRunWarmupExercise(preset = null) {
+        const container = document.getElementById('run-warmup-exercises-container');
+        if (!container) return;
+        const card = document.createElement('div');
+        card.className = 'card lift-warmup-ex-card';
+        card.style.position = 'relative';
+        card.innerHTML = `
+            <button style="position:absolute; top:8px; right:8px; padding:4px; width:auto; min-height:unset;" onclick="this.closest('.card').remove()">✕</button>
+            <input class="warmup-ex-name" type="text" list="exercise-list" placeholder="Exercise / Drill Name..." style="margin-bottom:8px; width: 85%;">
+            <div class="card-row" style="gap:8px; align-items:stretch; flex-wrap:wrap;">
+                <input class="warmup-ex-sets" type="number" placeholder="Sets">
+                <input class="warmup-ex-reps" type="number" placeholder="Reps">
+                <input class="warmup-ex-dist" type="number" step="any" placeholder="Distance (m)">
+            </div>
+        `;
+        container.appendChild(card);
+        attachExerciseAutocompletePersistence(card.querySelector('.warmup-ex-name'));
+        if (preset && typeof preset === 'object') {
+            card.querySelector('.warmup-ex-name').value = preset.name || '';
+            card.querySelector('.warmup-ex-sets').value = preset.sets || '';
+            card.querySelector('.warmup-ex-reps').value = preset.reps || '';
+            card.querySelector('.warmup-ex-dist').value = preset.distance || '';
+        }
+    }
+
     function addOtherExercise(preset = null) {
         const container = document.getElementById('other-exercises-container');
         if (!container) return;
@@ -1862,10 +1887,19 @@
     }
 
     function collectLiftWarmupExercises() {
-        return qsa('.lift-warmup-ex-card').map((card) => ({
+        return qsa('#lift-warmup-exercises-container .lift-warmup-ex-card').map((card) => ({
             name: card.querySelector('.warmup-ex-name')?.value?.trim() || '',
             weight: parseFloat(card.querySelector('.warmup-ex-weight')?.value) || 0,
             reps: parseInt(card.querySelector('.warmup-ex-reps')?.value, 10) || 0
+        })).filter((ex) => ex.name);
+    }
+
+    function collectRunWarmupExercises() {
+        return qsa('#run-warmup-exercises-container .lift-warmup-ex-card').map((card) => ({
+            name: card.querySelector('.warmup-ex-name')?.value?.trim() || '',
+            sets: parseInt(card.querySelector('.warmup-ex-sets')?.value, 10) || 0,
+            reps: parseInt(card.querySelector('.warmup-ex-reps')?.value, 10) || 0,
+            distance: parseFloat(card.querySelector('.warmup-ex-dist')?.value) || 0
         })).filter((ex) => ex.name);
     }
 
@@ -1926,6 +1960,163 @@
         switchTab('log', logNav || document.querySelector('.nav-item.active'));
     }
 
+    function openSessionPickerModal({ title, onSelect }) {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay active';
+
+        const card = document.createElement('div');
+        card.className = 'modal-card';
+        card.style.maxHeight = '80vh';
+        card.style.overflowY = 'auto';
+
+        const heading = document.createElement('h3');
+        heading.textContent = title;
+        card.appendChild(heading);
+
+        const searchInput = document.createElement('input');
+        searchInput.type = 'text';
+        searchInput.placeholder = 'Search sessions...';
+        searchInput.style.marginBottom = '10px';
+        card.appendChild(searchInput);
+
+        const list = document.createElement('div');
+        list.style.display = 'flex';
+        list.style.flexDirection = 'column';
+        list.style.gap = '8px';
+        card.appendChild(list);
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.style.marginTop = '12px';
+        cancelBtn.onclick = () => overlay.remove();
+        card.appendChild(cancelBtn);
+
+        overlay.appendChild(card);
+        document.body.appendChild(overlay);
+
+        const renderList = (filter = '') => {
+            list.innerHTML = '';
+            const lf = filter.toLowerCase();
+            const filtered = appState.sessions.filter((s) =>
+                !filter ||
+                (s.title || '').toLowerCase().includes(lf) ||
+                (s.date || '').includes(lf) ||
+                (s.type || '').toLowerCase().includes(lf)
+            );
+            if (filtered.length === 0) {
+                list.innerHTML = '<p style="color:var(--text-muted); font-size:0.85rem;">No matching sessions.</p>';
+                return;
+            }
+            filtered.slice(0, 30).forEach((s) => {
+                const btn = document.createElement('button');
+                btn.style.textAlign = 'left';
+                btn.style.padding = '10px';
+                btn.style.borderRadius = '8px';
+                btn.innerHTML = `<strong>${s.title || 'Training Session'}</strong>
+                    <span style="font-size:0.78rem; color:var(--text-muted); display:block;">
+                        ${s.date || '--'} • ${s.type || 'other'}
+                    </span>`;
+                btn.onclick = () => {
+                    overlay.remove();
+                    onSelect(s);
+                };
+                list.appendChild(btn);
+            });
+        };
+
+        renderList();
+        searchInput.addEventListener('input', () => renderList(searchInput.value));
+        searchInput.focus();
+    }
+
+    function openCopyWarmupPicker() {
+        const currentType = getSelectedRadio('log-type');
+        openSessionPickerModal({
+            title: 'Copy Warmup From Session',
+            onSelect: (source) => {
+                if (source.type === 'running' && currentType === 'running') {
+                    document.getElementById('run-warmup-duration').value = source.running?.warmup?.duration || '';
+                    document.getElementById('run-warmup-distance').value = source.running?.warmup?.distance || '';
+                    document.getElementById('run-warmup-notes').value = source.running?.warmup?.notes || '';
+                    const runWarmupExContainer = document.getElementById('run-warmup-exercises-container');
+                    if (runWarmupExContainer) runWarmupExContainer.innerHTML = '';
+                    (source.running?.warmup?.exercises || []).forEach((ex) => addRunWarmupExercise(ex));
+                    document.getElementById('run-warmup-section').open = true;
+                } else if (source.type === 'weightlifting' && currentType === 'weightlifting') {
+                    const container = document.getElementById('lift-warmup-exercises-container');
+                    if (container) container.innerHTML = '';
+                    (source.lifting?.warmup || []).forEach((ex) => addWarmupExercise(ex));
+                    document.getElementById('lift-warmup-section').open = true;
+                } else {
+                    showToast('Warmup type mismatch — switch to the matching session type first.', 'warning');
+                    return;
+                }
+                showToast('Warmup copied!', 'success');
+            }
+        });
+    }
+
+    function openCopySessionPicker() {
+        openSessionPickerModal({
+            title: 'Copy Full Session From',
+            onSelect: (source) => {
+                const typeRadio = document.querySelector(`input[name="log-type"][value="${source.type}"]`);
+                if (typeRadio) {
+                    typeRadio.checked = true;
+                    toggleLogType(source.type);
+                }
+                document.getElementById('log-title').value = `${source.title || 'Training Session'} (Copy)`;
+
+                if (source.type === 'running') {
+                    document.getElementById('run-warmup-duration').value = source.running?.warmup?.duration || '';
+                    document.getElementById('run-warmup-distance').value = source.running?.warmup?.distance || '';
+                    document.getElementById('run-warmup-notes').value = source.running?.warmup?.notes || '';
+                    const runWarmupExContainer = document.getElementById('run-warmup-exercises-container');
+                    if (runWarmupExContainer) runWarmupExContainer.innerHTML = '';
+                    (source.running?.warmup?.exercises || []).forEach((ex) => addRunWarmupExercise(ex));
+                    const tbody = qs('#run-splits-table tbody');
+                    if (tbody) tbody.innerHTML = '';
+                    (source.running?.splits || []).forEach((split) => addRunSplit(split));
+                    recalcRunTotals();
+                    if (source.running?.warmup?.duration ||
+                        source.running?.warmup?.distance ||
+                        source.running?.warmup?.notes ||
+                        (source.running?.warmup?.exercises || []).length) {
+                        document.getElementById('run-warmup-section').open = true;
+                    }
+                } else if (source.type === 'weightlifting') {
+                    document.getElementById('lift-duration').value = source.lifting?.duration || '';
+                    const warmupContainer = document.getElementById('lift-warmup-exercises-container');
+                    if (warmupContainer) warmupContainer.innerHTML = '';
+                    (source.lifting?.warmup || []).forEach((ex) => addWarmupExercise(ex));
+                    if ((source.lifting?.warmup || []).length > 0) {
+                        document.getElementById('lift-warmup-section').open = true;
+                    }
+                    const exContainer = document.getElementById('lift-exercises-container');
+                    if (exContainer) exContainer.innerHTML = '';
+                    (source.lifting?.exercises || []).forEach((ex) => {
+                        addLiftExercise();
+                        const cards = qsa('.lift-ex-card');
+                        const card = cards[cards.length - 1];
+                        if (!card) return;
+                        card.querySelector('.ex-name').value = ex.name || '';
+                        const defaultRows = card.querySelectorAll('tbody tr');
+                        defaultRows.forEach((r) => r.remove());
+                        (ex.sets || []).forEach((s) => addExSet(card.querySelector('.add-lift-set-btn'), s));
+                    });
+                } else {
+                    document.getElementById('other-activity').value = source.other?.activity || '';
+                    document.getElementById('other-duration').value = source.other?.duration || '';
+                    const otherContainer = document.getElementById('other-exercises-container');
+                    if (otherContainer) otherContainer.innerHTML = '';
+                    (source.other?.exercises || []).forEach((ex) => addOtherExercise(ex));
+                }
+
+                showToast('Session copied! Update date/time then save.', 'success');
+            }
+        });
+    }
+
     function startSessionEdit(sessionId) {
         const target = appState.sessions.find((s) => sessionIdValue(s) === sessionId);
         if (!target) {
@@ -1948,8 +2139,18 @@
             document.getElementById('run-warmup-duration').value = target.running?.warmup?.duration || '';
             document.getElementById('run-warmup-distance').value = target.running?.warmup?.distance || '';
             document.getElementById('run-warmup-notes').value = target.running?.warmup?.notes || '';
+            const runWarmupExContainer = document.getElementById('run-warmup-exercises-container');
+            if (runWarmupExContainer) runWarmupExContainer.innerHTML = '';
+            const warmupExercises = Array.isArray(target.running?.warmup?.exercises)
+                ? target.running.warmup.exercises : [];
+            warmupExercises.forEach((ex) => addRunWarmupExercise(ex));
             const runWarmup = document.getElementById('run-warmup-section');
-            if (runWarmup) runWarmup.open = !!(target.running?.warmup?.duration || target.running?.warmup?.distance || target.running?.warmup?.notes);
+            if (runWarmup) runWarmup.open = !!(
+                target.running?.warmup?.duration ||
+                target.running?.warmup?.distance ||
+                target.running?.warmup?.notes ||
+                (Array.isArray(target.running?.warmup?.exercises) && target.running.warmup.exercises.length)
+            );
             const tbody = qs('#run-splits-table tbody');
             tbody.innerHTML = '';
             const splits = Array.isArray(target.running?.splits) ? target.running.splits : [];
@@ -2077,9 +2278,10 @@
             const runningWarmup = {
                 duration: document.getElementById('run-warmup-duration').value.trim(),
                 distance: document.getElementById('run-warmup-distance').value.trim(),
-                notes: document.getElementById('run-warmup-notes').value.trim()
+                notes: document.getElementById('run-warmup-notes').value.trim(),
+                exercises: collectRunWarmupExercises()
             };
-            if (runningWarmup.duration || runningWarmup.distance || runningWarmup.notes) {
+            if (runningWarmup.duration || runningWarmup.distance || runningWarmup.notes || runningWarmup.exercises.length) {
                 sess.running.warmup = runningWarmup;
             }
         } else if(type === 'weightlifting') {
@@ -2203,6 +2405,8 @@
         document.getElementById('run-warmup-duration').value = '';
         document.getElementById('run-warmup-distance').value = '';
         document.getElementById('run-warmup-notes').value = '';
+        const runWarmupExContainer = document.getElementById('run-warmup-exercises-container');
+        if (runWarmupExContainer) runWarmupExContainer.innerHTML = '';
         document.getElementById('lift-duration').value = '';
         document.getElementById('lift-warmup-exercises-container').innerHTML = '';
         document.getElementById('lift-exercises-container').innerHTML = '';
@@ -2251,18 +2455,39 @@
                 ex.sets.forEach(s => {
                     if(s.load > 0 && s.reps > 0 && s.type !== 'warmup') {
                         let e1rm = s.load * (1 + s.reps/30);
-                        let k = ex.name;
+
+                        const isBackSquat = String(ex.name || '').trim().toLowerCase() === 'back squat';
+                        let k;
+                        if (isBackSquat) {
+                            const romValue = parseFloat(s.romCm);
+                            const rom = Number.isFinite(romValue) && romValue > 0
+                                ? `${Math.round(romValue)}cm`
+                                : 'full';
+                            k = `Back Squat (ROM: ${rom})`;
+                        } else {
+                            k = ex.name;
+                        }
+
                         let existing = state.personalBests.gym[k];
                         if(!existing || Object.keys(existing).length === 0) {
-                            state.personalBests.gym[k] = { e1rm: e1rm, load: s.load, reps: s.reps, date: sess.date, peak: s.peakPower };
+                            state.personalBests.gym[k] = {
+                                e1rm: e1rm, load: s.load, reps: s.reps,
+                                date: sess.date, peak: s.peakPower,
+                                romCm: s.romCm || null
+                            };
                             sess.hasPB = true;
                             sess.pbDetails.push(`${k} e1RM: ${Math.round(e1rm)}kg`);
                         } else {
                             if(e1rm > existing.e1rm) {
-                                existing.e1rm = e1rm; sess.hasPB = true;
-                                existing.date = sess.date; existing.load = s.load; existing.reps = s.reps;
+                                existing.e1rm = e1rm;
+                                existing.date = sess.date;
+                                existing.load = s.load;
+                                existing.reps = s.reps;
+                                sess.hasPB = true;
+                                const alreadyNoted = sess.pbDetails.some((d) => d.startsWith(`${k} e1RM:`));
+                                if (!alreadyNoted) sess.pbDetails.push(`${k} e1RM: ${Math.round(e1rm)}kg`);
                             }
-                            if(s.load > existing.load) { existing.load = s.load; existing.reps = s.reps; }
+                            if(s.load > (existing.load || 0)) { existing.load = s.load; existing.reps = s.reps; }
                             if(s.peakPower && (!existing.peak || s.peakPower > existing.peak)) { existing.peak = s.peakPower; }
                         }
                     }
@@ -2579,10 +2804,10 @@
     function renderPBsGym() {
         let t = document.getElementById('pr-gym-tbody');
         t.innerHTML = '';
-        let keys = Object.keys(appState.personalBests.gym).sort();
-        keys.forEach(k => {
+        const entries = Object.entries(appState.personalBests.gym)
+            .sort(([a], [b]) => a.localeCompare(b));
+        entries.forEach(([k, pb]) => {
             let row = document.createElement('tr');
-            let pb = appState.personalBests.gym[k];
             const td1 = document.createElement('td');
             const strong = document.createElement('strong');
             strong.textContent = k;
@@ -2704,6 +2929,9 @@
             emptyEl.className = 'cal-day empty';
             c.appendChild(emptyEl);
         }
+
+        const calView = document.getElementById('view-calendar');
+        if (calView) calView.scrollTop = 0;
     }
     window.renderCalendar = renderCalendar;
 
