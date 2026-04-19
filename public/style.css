@@ -387,7 +387,7 @@
         .banner.toast-danger { background: var(--danger); }
 
         /* Training Diary Ext */
-        .segmented-control { display: flex; background: var(--card); border-radius: 8px; padding: 4px; border: 1px solid var(--border); margin-bottom: 15px; gap: 4px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+        .segmented-control { flex-shrink: 0; display: flex; background: var(--card); border-radius: 8px; padding: 4px; border: 1px solid var(--border); margin-bottom: 15px; gap: 4px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
         .segmented-control::-webkit-scrollbar { display: none; }
         .segmented-control input[type="radio"] { display: none; }
         .segmented-control label {
