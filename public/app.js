@@ -639,9 +639,7 @@
         if(!currentUser) return;
         setSyncStatus('syncing', 'Saving...');
         try {
-            const measurementId = fallbackMeasurementId(m);
-            await sbClient.from('measurements').upsert({
-                id: measurementId,
+            const payload = {
                 user_id: currentUser.id,
                 date: m.date,
                 readiness: m.readiness,
@@ -652,7 +650,16 @@
                 stress_index: m.stressIndex,
                 rr_count: m.rrCount,
                 updated_at: m.updatedAt || new Date().toISOString()
-            });
+            };
+            if (m.id) payload.id = m.id;
+
+            const { data, error } = await sbClient.from('measurements').upsert(payload).select().single();
+            if (error) throw error;
+            
+            if (data && data.id && !m.id) {
+                m.id = data.id;
+                localStorage.setItem('omegahrv_measurements', JSON.stringify(appState.measurements));
+            }
             setSyncStatus('synced', 'Synced');
         } catch(e) { console.error(e); setSyncStatus('error', 'Sync error'); }
     }
@@ -661,9 +668,7 @@
         if(!currentUser) return;
         setSyncStatus('syncing', 'Saving...');
         try {
-            const sessionId = sessionIdValue(s);
-            await sbClient.from('training_sessions').upsert({
-                id: sessionId,
+            const payload = {
                 user_id: currentUser.id,
                 date: s.date,
                 time: s.time,
@@ -677,11 +682,14 @@
                 lifting_data: s.lifting || null,
                 other_data: s.other || null,
                 updated_at: s.updatedAt || new Date().toISOString()
-            });
-            if (!s.id) {
-                s.id = sessionId;
-                const idx = appState.sessions.findIndex(x => sessionIdValue(x) === sessionId);
-                if (idx >= 0) appState.sessions[idx] = s;
+            };
+            if (s.id) payload.id = s.id;
+
+            const { data, error } = await sbClient.from('training_sessions').upsert(payload).select().single();
+            if (error) throw error;
+            
+            if (data && data.id && !s.id) {
+                s.id = data.id;
                 localStorage.setItem('omegahrv_sessions', JSON.stringify(appState.sessions));
             }
             setSyncStatus('synced', 'Synced');
@@ -2602,7 +2610,25 @@
 
     window.deleteSession = async function(id) {
         const confirmed = await showConfirm("Delete this session forever?", { title: 'Delete session', confirmText: 'Delete' });
-        if(!confirmed) return;
+        if (!confirmed) return;
+
+        const before = appState.sessions.length;
+        appState.sessions = appState.sessions.filter(s => s.id !== id && sessionIdValue(s) !== id);
+        if (appState.sessions.length === before) {
+            showToast('Session not found in local state.', 'warning');
+        } else {
+            localStorage.setItem('omegahrv_sessions', JSON.stringify(appState.sessions));
+        }
+
+        recomputePersonalBestsFromSessions();
+        if (typeof editingSessionId !== 'undefined' && editingSessionId === id) setSessionEditState(null);
+        renderSessionList();
+        renderPBsGym(); renderPBsTrack();
+        if (typeof renderHistory !== 'undefined') renderHistory();
+        if (typeof currentCalYear !== 'undefined' && typeof currentCalMonth !== 'undefined') {
+            renderCalendar(currentCalYear, currentCalMonth);
+        }
+
         if (currentUser) {
             try {
                 const { error } = await sbClient
@@ -2611,21 +2637,15 @@
                     .eq('user_id', currentUser.id)
                     .eq('id', id);
                 if (error) {
-                    showToast('Delete failed: ' + error.message, 'danger');
+                    showToast('Cloud delete failed: ' + error.message, 'danger');
                     return;
                 }
-            } catch(e) {
-                showToast('Delete failed: ' + (e?.message || 'Unknown error'), 'danger');
+            } catch(e) { 
+                showToast('Cloud delete failed: ' + (e?.message || 'Unknown error'), 'danger');
                 return;
             }
         }
-        appState.sessions = appState.sessions.filter(s => sessionIdValue(s) !== id);
-        recomputePersonalBestsFromSessions();
-        if (editingSessionId === id) setSessionEditState(null);
-        renderSessionList();
-        renderPBsGym(); renderPBsTrack();
-        renderHistory();
-        if(typeof currentCalYear !== 'undefined') renderCalendar(currentCalYear, currentCalMonth);
+        
         pushProfile();
         showToast('Session deleted.', 'success');
     };
@@ -2633,19 +2653,34 @@
     async function deleteMeasurement(id) {
         const confirmed = await showConfirm('Delete this measurement?', { title: 'Delete measurement', confirmText: 'Delete' });
         if (!confirmed) return;
-        appState.measurements = appState.measurements.filter(m => fallbackMeasurementId(m) !== id);
-        localStorage.setItem('omegahrv_measurements', JSON.stringify(appState.measurements));
+        const before = appState.measurements.length;
+        appState.measurements = appState.measurements.filter(m => m.id !== id && fallbackMeasurementId(m) !== id);
+        if (appState.measurements.length === before) {
+            showToast('Measurement not found in local state.', 'warning');
+        } else {
+            localStorage.setItem('omegahrv_measurements', JSON.stringify(appState.measurements));
+        }
+
+        renderHistory();
+        renderDashboard();
+
         if (currentUser) {
             try {
-                const { error } = await sbClient.from('measurements')
+                const { error } = await sbClient
+                    .from('measurements')
                     .delete()
                     .eq('user_id', currentUser.id)
                     .eq('id', id);
-                if (error) console.warn('Cloud measurement delete failed', error);
-            } catch(e) { console.warn('Cloud measurement delete failed', e); }
+                if (error) {
+                    showToast('Cloud delete failed: ' + error.message, 'danger');
+                    return;
+                }
+            } catch(e) { 
+                showToast('Cloud delete failed: ' + (e?.message || 'Unknown error'), 'danger');
+                return;
+            }
         }
-        renderHistory();
-        renderDashboard();
+        
         showToast('Measurement deleted.', 'success');
     }
 
