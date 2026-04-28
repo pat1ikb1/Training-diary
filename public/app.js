@@ -1471,6 +1471,14 @@
             localStorage.removeItem('omegahrv_measurements');
             initApp();
             showToast("Data cleared.", 'success');
+            
+            if (currentUser) {
+                try {
+                    await sbClient.from('measurements').delete().eq('user_id', currentUser.id);
+                } catch(e) {
+                    console.error('Cloud clear failed:', e);
+                }
+            }
         }
     }
     // --- TRAINING DIARY LOGIC ---
@@ -2381,10 +2389,6 @@
         if(sess.hasPB) {
             confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, zIndex: 1000 });
         }
-        
-        if (currentUser) {
-            await loadSessions();
-        }
 
         setSessionEditState(null);
         resetLogForm();
@@ -2612,23 +2616,6 @@
         const confirmed = await showConfirm("Delete this session forever?", { title: 'Delete session', confirmText: 'Delete' });
         if (!confirmed) return;
 
-        const before = appState.sessions.length;
-        appState.sessions = appState.sessions.filter(s => s.id !== id && sessionIdValue(s) !== id);
-        if (appState.sessions.length === before) {
-            showToast('Session not found in local state.', 'warning');
-        } else {
-            localStorage.setItem('omegahrv_sessions', JSON.stringify(appState.sessions));
-        }
-
-        recomputePersonalBestsFromSessions();
-        if (typeof editingSessionId !== 'undefined' && editingSessionId === id) setSessionEditState(null);
-        renderSessionList();
-        renderPBsGym(); renderPBsTrack();
-        if (typeof renderHistory !== 'undefined') renderHistory();
-        if (typeof currentCalYear !== 'undefined' && typeof currentCalMonth !== 'undefined') {
-            renderCalendar(currentCalYear, currentCalMonth);
-        }
-
         if (currentUser) {
             try {
                 const { error } = await sbClient
@@ -2645,6 +2632,23 @@
                 return;
             }
         }
+
+        const before = appState.sessions.length;
+        appState.sessions = appState.sessions.filter(s => s.id !== id && sessionIdValue(s) !== id);
+        if (appState.sessions.length === before) {
+            showToast('Session not found in local state.', 'warning');
+        } else {
+            localStorage.setItem('omegahrv_sessions', JSON.stringify(appState.sessions));
+        }
+
+        recomputePersonalBestsFromSessions();
+        if (typeof editingSessionId !== 'undefined' && editingSessionId === id) setSessionEditState(null);
+        renderSessionList();
+        renderPBsGym(); renderPBsTrack();
+        if (typeof renderHistory !== 'undefined') renderHistory();
+        if (typeof currentCalYear !== 'undefined' && typeof currentCalMonth !== 'undefined') {
+            renderCalendar(currentCalYear, currentCalMonth);
+        }
         
         pushProfile();
         showToast('Session deleted.', 'success');
@@ -2653,16 +2657,6 @@
     async function deleteMeasurement(id) {
         const confirmed = await showConfirm('Delete this measurement?', { title: 'Delete measurement', confirmText: 'Delete' });
         if (!confirmed) return;
-        const before = appState.measurements.length;
-        appState.measurements = appState.measurements.filter(m => m.id !== id && fallbackMeasurementId(m) !== id);
-        if (appState.measurements.length === before) {
-            showToast('Measurement not found in local state.', 'warning');
-        } else {
-            localStorage.setItem('omegahrv_measurements', JSON.stringify(appState.measurements));
-        }
-
-        renderHistory();
-        renderDashboard();
 
         if (currentUser) {
             try {
@@ -2680,6 +2674,17 @@
                 return;
             }
         }
+
+        const before = appState.measurements.length;
+        appState.measurements = appState.measurements.filter(m => m.id !== id && fallbackMeasurementId(m) !== id);
+        if (appState.measurements.length === before) {
+            showToast('Measurement not found in local state.', 'warning');
+        } else {
+            localStorage.setItem('omegahrv_measurements', JSON.stringify(appState.measurements));
+        }
+
+        renderHistory();
+        renderDashboard();
         
         showToast('Measurement deleted.', 'success');
     }
