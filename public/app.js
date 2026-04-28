@@ -32,6 +32,7 @@
     const VISIBILITY_SYNC_DEBOUNCE_MS = 30000;
     const APP_SCHEMA_VERSION = 1;
     let syncDownPromise = null;
+    let deleteInProgress = false;
 
     // --- STATE ---
     const DEFAULT_SETTINGS = { name: '', age: '', initDuration: '60', duration: '180', lightMode: false };
@@ -362,6 +363,7 @@
 
     async function handleVisibilitySync() {
         if (document.visibilityState !== 'visible' || !currentUser) return;
+        if (deleteInProgress) return;
         const now = Date.now();
         if (now - lastVisibilitySyncAt < VISIBILITY_SYNC_DEBOUNCE_MS) return;
         lastVisibilitySyncAt = now;
@@ -1467,17 +1469,26 @@
     async function confirmClear() {
         const confirmed = await showConfirm("Are you sure you want to delete all historical measurements? This cannot be undone.", { title: 'Clear data', confirmText: 'Delete all' });
         if(confirmed) {
-            appState.measurements = [];
-            localStorage.removeItem('omegahrv_measurements');
-            initApp();
-            showToast("Data cleared.", 'success');
-            
-            if (currentUser) {
-                try {
-                    await sbClient.from('measurements').delete().eq('user_id', currentUser.id);
-                } catch(e) {
-                    console.error('Cloud clear failed:', e);
+            deleteInProgress = true;
+            try {
+                if (currentUser) {
+                    try {
+                        const { error } = await sbClient.from('measurements').delete().eq('user_id', currentUser.id);
+                        if (error) {
+                            showToast('Cloud clear failed: ' + error.message, 'danger');
+                            return;
+                        }
+                    } catch(e) {
+                        showToast('Cloud clear failed: ' + (e?.message || 'Unknown error'), 'danger');
+                        return;
+                    }
                 }
+                appState.measurements = [];
+                localStorage.removeItem('omegahrv_measurements');
+                initApp();
+                showToast("Data cleared.", 'success');
+            } finally {
+                deleteInProgress = false;
             }
         }
     }
@@ -2616,77 +2627,95 @@
         const confirmed = await showConfirm("Delete this session forever?", { title: 'Delete session', confirmText: 'Delete' });
         if (!confirmed) return;
 
-        if (currentUser) {
-            try {
-                const { error } = await sbClient
-                    .from('training_sessions')
-                    .delete()
-                    .eq('user_id', currentUser.id)
-                    .eq('id', id);
-                if (error) {
-                    showToast('Cloud delete failed: ' + error.message, 'danger');
+        deleteInProgress = true;
+        try {
+            if (currentUser) {
+                try {
+                    const { data, error } = await sbClient
+                        .from('training_sessions')
+                        .delete()
+                        .eq('user_id', currentUser.id)
+                        .eq('id', id)
+                        .select();
+                    if (error) {
+                        showToast('Cloud delete failed: ' + error.message, 'danger');
+                        return;
+                    }
+                    if (!data || data.length === 0) {
+                        console.warn('[deleteSession] Supabase delete matched 0 rows for id:', id);
+                    }
+                } catch(e) { 
+                    showToast('Cloud delete failed: ' + (e?.message || 'Unknown error'), 'danger');
                     return;
                 }
-            } catch(e) { 
-                showToast('Cloud delete failed: ' + (e?.message || 'Unknown error'), 'danger');
-                return;
             }
-        }
 
-        const before = appState.sessions.length;
-        appState.sessions = appState.sessions.filter(s => s.id !== id && sessionIdValue(s) !== id);
-        if (appState.sessions.length === before) {
-            showToast('Session not found in local state.', 'warning');
-        } else {
-            localStorage.setItem('omegahrv_sessions', JSON.stringify(appState.sessions));
-        }
+            const before = appState.sessions.length;
+            appState.sessions = appState.sessions.filter(s => s.id !== id && sessionIdValue(s) !== id);
+            if (appState.sessions.length === before) {
+                showToast('Session not found in local state.', 'warning');
+            } else {
+                localStorage.setItem('omegahrv_sessions', JSON.stringify(appState.sessions));
+            }
 
-        recomputePersonalBestsFromSessions();
-        if (typeof editingSessionId !== 'undefined' && editingSessionId === id) setSessionEditState(null);
-        renderSessionList();
-        renderPBsGym(); renderPBsTrack();
-        if (typeof renderHistory !== 'undefined') renderHistory();
-        if (typeof currentCalYear !== 'undefined' && typeof currentCalMonth !== 'undefined') {
-            renderCalendar(currentCalYear, currentCalMonth);
+            recomputePersonalBestsFromSessions();
+            if (typeof editingSessionId !== 'undefined' && editingSessionId === id) setSessionEditState(null);
+            renderSessionList();
+            renderPBsGym(); renderPBsTrack();
+            if (typeof renderHistory !== 'undefined') renderHistory();
+            if (typeof currentCalYear !== 'undefined' && typeof currentCalMonth !== 'undefined') {
+                renderCalendar(currentCalYear, currentCalMonth);
+            }
+            
+            pushProfile();
+            showToast('Session deleted.', 'success');
+        } finally {
+            deleteInProgress = false;
         }
-        
-        pushProfile();
-        showToast('Session deleted.', 'success');
     };
 
     async function deleteMeasurement(id) {
         const confirmed = await showConfirm('Delete this measurement?', { title: 'Delete measurement', confirmText: 'Delete' });
         if (!confirmed) return;
 
-        if (currentUser) {
-            try {
-                const { error } = await sbClient
-                    .from('measurements')
-                    .delete()
-                    .eq('user_id', currentUser.id)
-                    .eq('id', id);
-                if (error) {
-                    showToast('Cloud delete failed: ' + error.message, 'danger');
+        deleteInProgress = true;
+        try {
+            if (currentUser) {
+                try {
+                    const { data, error } = await sbClient
+                        .from('measurements')
+                        .delete()
+                        .eq('user_id', currentUser.id)
+                        .eq('id', id)
+                        .select();
+                    if (error) {
+                        showToast('Cloud delete failed: ' + error.message, 'danger');
+                        return;
+                    }
+                    if (!data || data.length === 0) {
+                        console.warn('[deleteMeasurement] Supabase delete matched 0 rows for id:', id);
+                    }
+                } catch(e) { 
+                    showToast('Cloud delete failed: ' + (e?.message || 'Unknown error'), 'danger');
                     return;
                 }
-            } catch(e) { 
-                showToast('Cloud delete failed: ' + (e?.message || 'Unknown error'), 'danger');
-                return;
             }
-        }
 
-        const before = appState.measurements.length;
-        appState.measurements = appState.measurements.filter(m => m.id !== id && fallbackMeasurementId(m) !== id);
-        if (appState.measurements.length === before) {
-            showToast('Measurement not found in local state.', 'warning');
-        } else {
-            localStorage.setItem('omegahrv_measurements', JSON.stringify(appState.measurements));
-        }
+            const before = appState.measurements.length;
+            appState.measurements = appState.measurements.filter(m => m.id !== id && fallbackMeasurementId(m) !== id);
+            if (appState.measurements.length === before) {
+                showToast('Measurement not found in local state.', 'warning');
+            } else {
+                localStorage.setItem('omegahrv_measurements', JSON.stringify(appState.measurements));
+            }
 
-        renderHistory();
-        renderDashboard();
-        
-        showToast('Measurement deleted.', 'success');
+            renderHistory();
+            renderDashboard();
+            
+            showToast('Measurement deleted.', 'success');
+        } finally {
+            deleteInProgress = false;
+        }
     }
 
     function addCustomTrackPB() {
