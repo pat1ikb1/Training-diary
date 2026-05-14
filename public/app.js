@@ -2610,7 +2610,7 @@
             delBtn.style.borderColor = 'var(--danger)';
             delBtn.style.color = 'var(--danger)';
             delBtn.textContent = 'Delete';
-            delBtn.dataset.sessionId = s.id || sessionIdValue(s);
+            delBtn.dataset.sessionId = sessionIdValue(s);
             delBtn.className = 'delete-session-btn';
             const editBtn = document.createElement('button');
             editBtn.textContent = 'Edit';
