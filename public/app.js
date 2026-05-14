@@ -2633,6 +2633,19 @@
 
         deleteInProgress = true;
         try {
+            // ✅ Always remove locally first, regardless of cloud result
+            const before = appState.sessions.length;
+            appState.sessions = appState.sessions.filter(s => s.id !== id || sessionIdValue(s) !== id);
+            // ✅ Use || (OR) so a session is removed if EITHER id matches
+            appState.sessions = appState.sessions.filter(s => s.id !== id && sessionIdValue(s) !== id);
+
+            if (appState.sessions.length === before) {
+                showToast('Session not found in local state.', 'warning');
+            } else {
+                localStorage.setItem('omegahrv_sessions', JSON.stringify(appState.sessions));
+            }
+
+            // ✅ Cloud delete is best-effort — errors are warned but don't block local removal
             if (currentUser) {
                 try {
                     const { data, error } = await sbClient
@@ -2642,24 +2655,15 @@
                         .eq('id', id)
                         .select();
                     if (error) {
-                        showToast('Cloud delete failed: ' + error.message, 'danger');
-                        return;
-                    }
-                    if (!data || data.length === 0) {
+                        console.warn('[deleteSession] Cloud delete error:', error.message);
+                        showToast('Deleted locally. Cloud sync issue: ' + error.message, 'warning');
+                    } else if (!data || data.length === 0) {
                         console.warn('[deleteSession] Supabase delete matched 0 rows for id:', id);
                     }
-                } catch(e) { 
-                    showToast('Cloud delete failed: ' + (e?.message || 'Unknown error'), 'danger');
-                    return;
+                } catch(e) {
+                    console.warn('[deleteSession] Cloud delete exception:', e?.message);
+                    showToast('Deleted locally. Cloud sync issue: ' + (e?.message || 'Unknown error'), 'warning');
                 }
-            }
-
-            const before = appState.sessions.length;
-            appState.sessions = appState.sessions.filter(s => s.id !== id && sessionIdValue(s) !== id);
-            if (appState.sessions.length === before) {
-                showToast('Session not found in local state.', 'warning');
-            } else {
-                localStorage.setItem('omegahrv_sessions', JSON.stringify(appState.sessions));
             }
 
             recomputePersonalBestsFromSessions();
@@ -2670,7 +2674,7 @@
             if (typeof currentCalYear !== 'undefined' && typeof currentCalMonth !== 'undefined') {
                 renderCalendar(currentCalYear, currentCalMonth);
             }
-            
+
             pushProfile();
             showToast('Session deleted.', 'success');
         } finally {
@@ -2684,6 +2688,16 @@
 
         deleteInProgress = true;
         try {
+            const before = appState.measurements.length;
+            appState.measurements = appState.measurements.filter(m => m.id !== id || fallbackMeasurementId(m) !== id);
+            appState.measurements = appState.measurements.filter(m => m.id !== id && fallbackMeasurementId(m) !== id);
+            
+            if (appState.measurements.length === before) {
+                showToast('Measurement not found in local state.', 'warning');
+            } else {
+                localStorage.setItem('omegahrv_measurements', JSON.stringify(appState.measurements));
+            }
+
             if (currentUser) {
                 try {
                     const { data, error } = await sbClient
@@ -2693,24 +2707,15 @@
                         .eq('id', id)
                         .select();
                     if (error) {
-                        showToast('Cloud delete failed: ' + error.message, 'danger');
-                        return;
-                    }
-                    if (!data || data.length === 0) {
+                        console.warn('[deleteMeasurement] Cloud delete error:', error.message);
+                        showToast('Deleted locally. Cloud sync issue: ' + error.message, 'warning');
+                    } else if (!data || data.length === 0) {
                         console.warn('[deleteMeasurement] Supabase delete matched 0 rows for id:', id);
                     }
-                } catch(e) { 
-                    showToast('Cloud delete failed: ' + (e?.message || 'Unknown error'), 'danger');
-                    return;
+                } catch(e) {
+                    console.warn('[deleteMeasurement] Cloud delete exception:', e?.message);
+                    showToast('Deleted locally. Cloud sync issue: ' + (e?.message || 'Unknown error'), 'warning');
                 }
-            }
-
-            const before = appState.measurements.length;
-            appState.measurements = appState.measurements.filter(m => m.id !== id && fallbackMeasurementId(m) !== id);
-            if (appState.measurements.length === before) {
-                showToast('Measurement not found in local state.', 'warning');
-            } else {
-                localStorage.setItem('omegahrv_measurements', JSON.stringify(appState.measurements));
             }
 
             renderHistory();
