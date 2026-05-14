@@ -43,6 +43,10 @@
                 <svg viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
                 <span>Dashboard</span>
             </button>
+            <button type="button" class="nav-item" onclick="switchTab('readiness', this)">
+                <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" fill="currentColor"/></svg>
+                <span>Readiness</span>
+            </button>
             <button type="button" class="nav-item" onclick="switchTab('measure', this)">
                 <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
                 <span>Measure</span>
@@ -117,6 +121,299 @@
                         <canvas id="sparklineChart"></canvas>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- READINESS (Omegawave) -->
+        <div class="view" id="view-readiness">
+
+            <!-- SUB-SCREEN 1: READINESS HOME -->
+            <div class="ow-screen active" id="ow-home">
+                <!-- Greeting Card -->
+                <div class="card ow-greeting-card">
+                    <h3 id="ow-greeting">Good morning, Athlete.</h3>
+                    <p class="ow-subtitle">Showing up is the hardest part, and you did it.</p>
+                    <button class="primary" style="width: 100%; margin-top: 12px;" onclick="showOWScreen('ow-measure')">Start Another Assessment ☑</button>
+                </div>
+
+                <!-- Stress Resilience -->
+                <div class="card" style="text-align: center; padding: 20px;">
+                    <div class="ow-card-header">
+                        <span class="ow-card-title">Stress Resilience</span>
+                        <button class="ow-info-btn" onclick="showOWInfo('stressResilience')">ⓘ</button>
+                    </div>
+                    <div class="ow-arc-gauge" id="ow-arc-gauge">
+                        <svg viewBox="0 0 200 130" id="ow-arc-svg">
+                            <path d="M 20 120 A 80 80 0 0 1 180 120" fill="none" stroke="var(--border)" stroke-width="12" stroke-linecap="round"/>
+                            <path id="ow-arc-fill" d="M 20 120 A 80 80 0 0 1 180 120" fill="none" stroke="var(--accent)" stroke-width="12" stroke-linecap="round" stroke-dasharray="0 999"/>
+                            <text x="100" y="90" text-anchor="middle" fill="var(--accent)" font-size="32" font-weight="600" id="ow-sr-value">--</text>
+                            <text x="100" y="115" text-anchor="middle" fill="var(--text-muted)" font-size="14" id="ow-sr-label">--</text>
+                            <text x="20" y="128" text-anchor="middle" fill="var(--text-muted)" font-size="11">1</text>
+                            <text x="180" y="128" text-anchor="middle" fill="var(--text-muted)" font-size="11">7</text>
+                        </svg>
+                    </div>
+                    <p class="ow-insight" id="ow-sr-insight" style="font-size: 0.85rem; color: var(--text-muted); margin-top: 8px;"></p>
+                </div>
+
+                <!-- Heart Balance Card -->
+                <div class="card ow-score-card" onclick="showOWScreen('ow-cardiac')">
+                    <div class="ow-card-header">
+                        <button class="ow-info-btn" onclick="event.stopPropagation(); showOWInfo('heartBalance')">ⓘ</button>
+                    </div>
+                    <div class="ow-score-ring" id="ow-heart-ring">
+                        <strong id="ow-heart-score">--</strong>
+                    </div>
+                    <h4>Heart Balance</h4>
+                    <span class="ow-score-label" id="ow-heart-label">--</span>
+                    <p class="ow-card-desc" id="ow-heart-desc">Tap to see cardiac readiness details.</p>
+                    <div class="ow-card-preview" id="ow-heart-preview">
+                        <div class="ow-index-row">
+                            <span class="ow-index-name">Parasympathetic</span>
+                            <span class="ow-index-label" id="ow-home-para-label">--</span>
+                            <div class="ow-index-bar"><div class="ow-index-fill" id="ow-home-para-fill" style="width: 0%"></div></div>
+                        </div>
+                        <div class="ow-index-row">
+                            <span class="ow-index-name">Sympathetic</span>
+                            <span class="ow-index-label" id="ow-home-symp-label">--</span>
+                            <div class="ow-index-bar"><div class="ow-index-fill symp" id="ow-home-symp-fill" style="width: 0%"></div></div>
+                        </div>
+                    </div>
+                    <span class="ow-drill-link">See advanced metrics →</span>
+                </div>
+
+                <!-- Mind Balance Card -->
+                <div class="card ow-score-card" onclick="showOWScreen('ow-cns')">
+                    <div class="ow-card-header">
+                        <button class="ow-info-btn" onclick="event.stopPropagation(); showOWInfo('mindBalance')">ⓘ</button>
+                    </div>
+                    <div class="ow-score-ring status-mind" id="ow-mind-ring">
+                        <strong id="ow-mind-score">--</strong>
+                    </div>
+                    <h4>Mind Balance</h4>
+                    <span class="ow-score-label" id="ow-mind-label">--</span>
+                    <p class="ow-card-desc" id="ow-mind-desc">Tap to see CNS readiness details.</p>
+                    <span class="ow-drill-link">Show breakdown →</span>
+                </div>
+
+                <!-- Windows of Trainability -->
+                <div class="card" style="padding: 20px;">
+                    <div class="ow-card-header">
+                        <span class="ow-card-title">Windows of Trainability™</span>
+                        <button class="ow-info-btn" onclick="showOWInfo('trainability')">ⓘ</button>
+                    </div>
+                    <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 16px;">Identifies the optimal window to train each physical quality, based on your body's current functional state.</p>
+                    <div class="ow-train-grid">
+                        <div class="ow-train-col">
+                            <div class="ow-train-bar-track"><div class="ow-train-bar-fill" id="ow-train-endurance" style="height: 0%"></div></div>
+                            <span class="ow-train-label">Endurance</span>
+                        </div>
+                        <div class="ow-train-col">
+                            <div class="ow-train-bar-track"><div class="ow-train-bar-fill" id="ow-train-speed" style="height: 0%"></div></div>
+                            <span class="ow-train-label">Speed<br>&amp; power</span>
+                        </div>
+                        <div class="ow-train-col">
+                            <div class="ow-train-bar-track"><div class="ow-train-bar-fill" id="ow-train-strength" style="height: 0%"></div></div>
+                            <span class="ow-train-label">Strength</span>
+                        </div>
+                        <div class="ow-train-col">
+                            <div class="ow-train-bar-track"><div class="ow-train-bar-fill" id="ow-train-coord" style="height: 0%"></div></div>
+                            <span class="ow-train-label">Coordination<br>&amp; skills</span>
+                        </div>
+                    </div>
+                    <div class="ow-train-scale">
+                        <span>1</span><span>2</span><span>3</span><span>4</span>
+                    </div>
+                </div>
+
+                <!-- No-data placeholder -->
+                <div id="ow-home-empty" class="card" style="display: none; text-align: center; padding: 30px 20px;">
+                    <h3 style="margin-bottom: 8px;">No Assessment Yet</h3>
+                    <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 16px;">Complete your first Omegawave assessment to see your readiness data.</p>
+                    <button class="primary" onclick="showOWScreen('ow-measure')">Start Assessment</button>
+                </div>
+            </div>
+
+            <!-- SUB-SCREEN 2: CARDIAC READINESS DETAIL -->
+            <div class="ow-screen" id="ow-cardiac">
+                <button class="ow-back-btn" onclick="showOWScreen('ow-home')">← Back</button>
+
+                <div class="card" style="padding: 20px;">
+                    <span class="ow-card-title">Cardiac Readiness</span>
+                    <div class="chart-container" style="height: 200px;">
+                        <canvas id="ow-cardiac-chart"></canvas>
+                    </div>
+                </div>
+
+                <div class="card" style="padding: 20px;">
+                    <div class="ow-card-header">
+                        <span class="ow-card-title">Measurements</span>
+                        <button class="ow-info-btn" onclick="showOWInfo('restingHR')">ⓘ</button>
+                    </div>
+
+                    <div class="ow-metric-row">
+                        <span>Resting HR</span>
+                        <strong id="ow-det-hr">-- bpm</strong>
+                    </div>
+
+                    <div class="ow-metric-row">
+                        <div style="display: flex; align-items: center; gap: 4px;">
+                            <span>Parasympathetic</span>
+                            <button class="ow-info-btn-sm" onclick="showOWInfo('parasympathetic')">ⓘ</button>
+                        </div>
+                        <div>
+                            <span class="ow-index-val" id="ow-det-para-val">--</span>
+                            <div class="ow-index-label" id="ow-det-para-label">--</div>
+                            <div class="ow-index-bar" style="width: 180px; margin-top: 4px;"><div class="ow-index-fill" id="ow-det-para-fill" style="width: 0%"></div></div>
+                        </div>
+                    </div>
+
+                    <div class="ow-metric-row">
+                        <div style="display: flex; align-items: center; gap: 4px;">
+                            <span>Sympathetic</span>
+                            <button class="ow-info-btn-sm" onclick="showOWInfo('sympathetic')">ⓘ</button>
+                        </div>
+                        <div>
+                            <span class="ow-index-val" id="ow-det-symp-val">--</span>
+                            <div class="ow-index-label" id="ow-det-symp-label">--</div>
+                            <div class="ow-index-bar" style="width: 180px; margin-top: 4px;"><div class="ow-index-fill symp" id="ow-det-symp-fill" style="width: 0%"></div></div>
+                        </div>
+                    </div>
+
+                    <div class="ow-metric-row">
+                        <div style="display: flex; align-items: center; gap: 4px;">
+                            <span>Cardiac Stress</span>
+                            <button class="ow-info-btn-sm" onclick="showOWInfo('cardiacStress')">ⓘ</button>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span id="ow-det-cs-label">--</span>
+                            <div class="ow-cs-badge" id="ow-det-cs-badge">--</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Advanced Metrics -->
+                <div class="card" style="padding: 20px;">
+                    <button type="button" class="accordion-toggle" onclick="toggleOWAccordion('ow-time-domain')"><span>HRV Time-Domain</span><span>▾</span></button>
+                    <div class="accordion-body" id="ow-time-domain" style="display: none;">
+                        <div class="ow-metric-row"><div style="display: flex; align-items: center; gap: 4px;"><span>SDNN</span><button class="ow-info-btn-sm" onclick="showOWInfo('sdnn')">ⓘ</button></div><strong id="ow-det-sdnn">-- ms</strong></div>
+                        <div class="ow-metric-row"><div style="display: flex; align-items: center; gap: 4px;"><span>RMSSD</span><button class="ow-info-btn-sm" onclick="showOWInfo('rmssd')">ⓘ</button></div><strong id="ow-det-rmssd">-- ms</strong></div>
+                        <div class="ow-metric-row"><div style="display: flex; align-items: center; gap: 4px;"><span>SDSD</span><button class="ow-info-btn-sm" onclick="showOWInfo('sdsd')">ⓘ</button></div><strong id="ow-det-sdsd">-- ms</strong></div>
+                    </div>
+
+                    <button type="button" class="accordion-toggle" onclick="toggleOWAccordion('ow-freq-domain')" style="margin-top: 8px;"><span>HRV Frequency-Domain</span><span>▾</span></button>
+                    <div class="accordion-body" id="ow-freq-domain" style="display: none;">
+                        <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 8px; font-style: italic;">Frequency domain requires FFT on RR series — implement once ECG delta decoding is confirmed.</p>
+                        <div class="ow-metric-row"><div style="display: flex; align-items: center; gap: 4px;"><span>LF Power</span><button class="ow-info-btn-sm" onclick="showOWInfo('lfPower')">ⓘ</button></div><strong>-- ms²</strong></div>
+                        <div class="ow-metric-row"><div style="display: flex; align-items: center; gap: 4px;"><span>HF Power</span><button class="ow-info-btn-sm" onclick="showOWInfo('hfPower')">ⓘ</button></div><strong>-- ms²</strong></div>
+                        <div class="ow-metric-row"><div style="display: flex; align-items: center; gap: 4px;"><span>LF/HF Ratio</span><button class="ow-info-btn-sm" onclick="showOWInfo('lfHfRatio')">ⓘ</button></div><strong>--</strong></div>
+                        <div class="ow-metric-row"><div style="display: flex; align-items: center; gap: 4px;"><span>Total Power</span><button class="ow-info-btn-sm" onclick="showOWInfo('totalPower')">ⓘ</button></div><strong>-- ms²</strong></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SUB-SCREEN 3: CNS READINESS DETAIL -->
+            <div class="ow-screen" id="ow-cns">
+                <button class="ow-back-btn" onclick="showOWScreen('ow-home')">← Back</button>
+
+                <div class="card" style="padding: 20px;">
+                    <span class="ow-card-title">CNS Readiness</span>
+                    <div class="chart-container" style="height: 200px;">
+                        <canvas id="ow-cns-chart"></canvas>
+                    </div>
+                </div>
+
+                <div class="card" style="padding: 20px;">
+                    <div class="ow-card-header">
+                        <div style="display: flex; align-items: center; gap: 4px;">
+                            <span class="ow-card-title">DC Potential</span>
+                            <button class="ow-info-btn-sm" onclick="showOWInfo('dcPotential')">ⓘ</button>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: baseline; gap: 10px; margin: 10px 0;">
+                        <strong style="font-size: 2rem;" id="ow-det-dc-mv">-- mV</strong>
+                        <span class="ow-dc-zone-label" id="ow-det-dc-zone">--</span>
+                    </div>
+                </div>
+
+                <div class="card" style="padding: 20px;">
+                    <span class="ow-card-title">DC Potential Curve</span>
+                    <div class="chart-container" style="height: 200px; position: relative;">
+                        <canvas id="ow-dc-curve-chart"></canvas>
+                    </div>
+                </div>
+
+                <div class="card" style="padding: 20px;">
+                    <div class="ow-card-header">
+                        <div style="display: flex; align-items: center; gap: 4px;">
+                            <span class="ow-card-title">Curve Shape</span>
+                            <button class="ow-info-btn-sm" onclick="showOWInfo('curveShape')">ⓘ</button>
+                        </div>
+                    </div>
+                    <strong id="ow-det-curve-shape" style="display: block; margin: 8px 0;">--</strong>
+                    <p id="ow-det-curve-desc" style="font-size: 0.85rem; color: var(--text-muted);"></p>
+                </div>
+
+                <div class="card" style="padding: 20px;">
+                    <span class="ow-card-title">Key Factors</span>
+                    <div class="ow-metric-row"><span>Initial Value</span><strong id="ow-det-dc-init">-- mV</strong></div>
+                    <div class="ow-metric-row"><span>Stabilization Value</span><strong id="ow-det-dc-stab">-- mV</strong></div>
+                    <div class="ow-metric-row"><span>Stabilization Time</span><strong id="ow-det-dc-time">-- s</strong></div>
+                </div>
+            </div>
+
+            <!-- SUB-SCREEN 4: MEASUREMENT / CONNECTION -->
+            <div class="ow-screen" id="ow-measure">
+                <button class="ow-back-btn" onclick="showOWScreen('ow-home')">← Back</button>
+
+                <!-- Connect card -->
+                <div id="ow-setup" class="card" style="align-items: center; text-align: center; padding: 30px 20px;">
+                    <svg viewBox="0 0 24 24" style="width: 48px; height: 48px; fill: var(--accent); margin-bottom: 10px;"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+                    <h3 style="margin-bottom: 8px;">Omegawave Readiness</h3>
+                    <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px;">Connect your OW-CB2 sensor to measure CNS readiness and HRV. Place the sensor on your forehead with electrodes moistened.</p>
+                    <p id="ow-ble-unsupported" style="display: none; color: var(--warning); font-size: 0.8rem; margin-bottom: 15px;">Web Bluetooth is not supported in this browser. Please use Bluefy on iOS or Chrome on desktop.</p>
+                    <button class="primary" id="btn-ow-connect" onclick="startOmegawaveMeasurement()">Connect Omegawave</button>
+                </div>
+
+                <!-- Live Measurement -->
+                <div id="ow-active" class="ow-active-panel">
+                    <div class="measure-ring" id="ow-timer-ring">
+                        <div class="live-hr" id="ow-live-hr">--</div>
+                        <div style="color: var(--text-muted); font-size: 0.9rem; margin-top: -10px;">BPM</div>
+                        <div class="live-timer" id="ow-live-timer">03:00</div>
+                    </div>
+                    <div class="measure-status" id="ow-status-text">Connecting to OW-CB2...</div>
+
+                    <div class="stat-grid" style="width: 100%; max-width: 400px;">
+                        <div class="card ow-metric-card">
+                            <span style="font-size: 0.75rem; color: var(--text-muted);">RMSSD</span>
+                            <strong style="font-size: 1.1rem;" id="ow-live-rmssd">-- ms</strong>
+                        </div>
+                        <div class="card ow-metric-card">
+                            <span style="font-size: 0.75rem; color: var(--text-muted);">CNS (mV)</span>
+                            <strong style="font-size: 1.1rem;" id="ow-live-cns">-- mV</strong>
+                        </div>
+                    </div>
+
+                    <div class="card" style="width: 100%; max-width: 600px;">
+                        <span style="font-size: 0.8rem; color: var(--text-muted);">Live CNS Signal</span>
+                        <div class="cns-chart-container">
+                            <canvas id="cns-live-chart"></canvas>
+                        </div>
+                    </div>
+
+                    <button id="btn-ow-cancel" onclick="cancelOmegawaveMeasurement()" style="margin-top: 10px; max-width: 200px;">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- OW Info Bottom Sheet Modal -->
+        <div id="ow-info-modal" class="ow-info-modal">
+            <div class="ow-info-content">
+                <div class="ow-info-header">
+                    <h4 id="ow-info-title">Info</h4>
+                    <button onclick="hideOWInfo()" class="ow-info-close">✕</button>
+                </div>
+                <p id="ow-info-text"></p>
             </div>
         </div>
 
@@ -462,6 +759,7 @@
     </div>
 
 <script src="config.js"></script>
+<script src="omegawave.js"></script>
 <script src="app.js"></script>
 
 </body>

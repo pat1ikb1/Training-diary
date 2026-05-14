@@ -776,6 +776,8 @@
 
         if (!navigator.bluetooth) {
             document.getElementById('ble-unsupported').style.display = 'block';
+            const owBleWarn = document.getElementById('ow-ble-unsupported');
+            if (owBleWarn) owBleWarn.style.display = 'block';
         }
 
         // Check existing Supabase session
@@ -861,6 +863,7 @@
         if (!activeView) return;
         const id = activeView.id;
         if (id === 'view-dashboard') renderDashboard();
+        else if (id === 'view-readiness') renderReadinessTab();
         else if (id === 'view-history') renderHistory();
         else if (id === 'view-calendar') renderCalendar(currentCalYear, currentCalMonth);
         else if (id === 'view-analytics') renderAnalytics();
@@ -891,6 +894,7 @@
         document.getElementById('sidebar').classList.remove('open'); // close on mobile
 
         if(tabId === 'dashboard') renderDashboard();
+        if(tabId === 'readiness') renderReadinessTab();
         if(tabId === 'history') renderHistory();
         if(tabId === 'log') { 
             let dEl = document.getElementById('log-date');
@@ -4689,3 +4693,530 @@
         ensureAccordionState();
     }
     window.renderAnalytics = renderAnalytics;
+
+    // =========================================================================
+    // OMEGAWAVE READINESS TAB
+    // =========================================================================
+
+    let owMeasState = {
+        running: false,
+        timerInterval: null,
+        timeLeft: 180,
+        cnsSamples: [],
+        cnsMvSamples: [],
+        ecgRawPackets: [],
+        rrIntervals: [],
+        lastResult: null,
+        lastHistory: null
+    };
+
+    let chartCNSLive = null;
+    let chartCardiacHistory = null;
+    let chartCNSHistory = null;
+    let chartDCCurve = null;
+    const CNS_CHART_MAX_POINTS = 300;
+    let cnsChartLabels = [];
+    let cnsChartData = [];
+
+    // --- Sub-screen Navigation ---
+    function showOWScreen(screenId) {
+        document.querySelectorAll('#view-readiness .ow-screen').forEach(s => s.classList.remove('active'));
+        const target = document.getElementById(screenId);
+        if (target) target.classList.add('active');
+
+        if (screenId === 'ow-cardiac' && owMeasState.lastResult) {
+            renderOWCardiacDetail(owMeasState.lastResult, owMeasState.lastHistory || []);
+        } else if (screenId === 'ow-cns' && owMeasState.lastResult) {
+            renderOWCNSDetail(owMeasState.lastResult, owMeasState.lastHistory || []);
+        } else if (screenId === 'ow-measure') {
+            const owBleWarn = document.getElementById('ow-ble-unsupported');
+            if (owBleWarn && !navigator.bluetooth) owBleWarn.style.display = 'block';
+        }
+    }
+    window.showOWScreen = showOWScreen;
+
+    // --- Info Modal ---
+    function showOWInfo(key) {
+        const info = window.OW.INFO[key];
+        if (!info) return;
+        document.getElementById('ow-info-title').textContent = info.title;
+        document.getElementById('ow-info-text').textContent = info.text;
+        document.getElementById('ow-info-modal').classList.add('active');
+    }
+    function hideOWInfo() {
+        document.getElementById('ow-info-modal').classList.remove('active');
+    }
+    window.showOWInfo = showOWInfo;
+    window.hideOWInfo = hideOWInfo;
+
+    // --- Accordion Toggle ---
+    function toggleOWAccordion(id) {
+        const el = document.getElementById(id);
+        if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    }
+    window.toggleOWAccordion = toggleOWAccordion;
+
+    // --- Readiness Tab Render ---
+    async function renderReadinessTab() {
+        const owBleWarn = document.getElementById('ow-ble-unsupported');
+        if (owBleWarn && !navigator.bluetooth) owBleWarn.style.display = 'block';
+        await loadAndRenderReadinessHome();
+    }
+
+    async function loadAndRenderReadinessHome() {
+        if (!currentUser) {
+            showOWEmpty();
+            return;
+        }
+        try {
+            const { data, error } = await sbClient
+                .from('readiness_results')
+                .select('*')
+                .eq('user_id', currentUser.id)
+                .order('created_at', { ascending: false })
+                .limit(10);
+            if (error) throw error;
+
+            owMeasState.lastHistory = data || [];
+
+            if (!data || data.length === 0) {
+                showOWEmpty();
+                return;
+            }
+
+            const latest = data[0];
+            owMeasState.lastResult = latest;
+            renderOWHome(latest);
+        } catch (e) {
+            console.error('[Readiness] Load error:', e);
+            showOWEmpty();
+        }
+    }
+
+    function showOWEmpty() {
+        const homeCards = document.querySelectorAll('#ow-home > .card:not(#ow-home-empty), #ow-home > .ow-score-card');
+        homeCards.forEach(c => c.style.display = 'none');
+        const empty = document.getElementById('ow-home-empty');
+        if (empty) empty.style.display = 'block';
+    }
+
+    function renderOWHome(r) {
+        // Show all home cards, hide empty
+        document.querySelectorAll('#ow-home > .card, #ow-home > .ow-score-card').forEach(c => c.style.display = '');
+        const empty = document.getElementById('ow-home-empty');
+        if (empty) empty.style.display = 'none';
+
+        // Greeting
+        const greetEl = document.getElementById('ow-greeting');
+        if (greetEl) greetEl.textContent = `${window.OW.getGreeting()}, Patrik.`;
+
+        // Stress Resilience arc
+        const sr = r.stress_resilience || 4;
+        const srLabel = window.OW.stressResilienceLabel(sr);
+        document.getElementById('ow-sr-value').textContent = sr;
+        document.getElementById('ow-sr-label').textContent = srLabel;
+
+        // Animate arc: total arc length ≈ 251 (semicircle r=80)
+        const arcLength = 251;
+        const fraction = (sr - 1) / 6;
+        const fillLen = fraction * arcLength;
+        const arcFill = document.getElementById('ow-arc-fill');
+        if (arcFill) arcFill.setAttribute('stroke-dasharray', `${fillLen} ${arcLength}`);
+
+        // Color arc by score
+        const arcColor = sr >= 5 ? 'var(--success)' : sr >= 3 ? 'var(--warning)' : 'var(--danger)';
+        if (arcFill) arcFill.setAttribute('stroke', arcColor);
+        document.getElementById('ow-sr-value').setAttribute('fill', arcColor);
+
+        // Insight
+        const insightEl = document.getElementById('ow-sr-insight');
+        if (insightEl) {
+            if (sr >= 5) insightEl.textContent = 'Your body is well-recovered and ready for demanding training.';
+            else if (sr >= 3) insightEl.textContent = 'Moderate readiness. Consider adjusting training intensity.';
+            else insightEl.textContent = 'Your body needs recovery. Prioritize rest today.';
+        }
+
+        // Heart Balance
+        const cs = r.cardiac_stress || 4;
+        const hbLabel = window.OW.heartBalanceLabel(cs);
+        document.getElementById('ow-heart-score').textContent = cs;
+        document.getElementById('ow-heart-label').textContent = hbLabel;
+        const heartRing = document.getElementById('ow-heart-ring');
+        heartRing.style.borderColor = cs >= 5 ? 'var(--success)' : cs >= 3 ? 'var(--warning)' : 'var(--danger)';
+        document.getElementById('ow-heart-score').style.color = cs >= 5 ? 'var(--success)' : cs >= 3 ? 'var(--warning)' : 'var(--danger)';
+
+        // Para/Symp preview bars
+        const para = r.parasympathetic || 0;
+        const symp = r.sympathetic || 0;
+        document.getElementById('ow-home-para-label').textContent = window.OW.parasympatheticLabel(para);
+        document.getElementById('ow-home-para-fill').style.width = (para * 100) + '%';
+        document.getElementById('ow-home-symp-label').textContent = window.OW.sympatheticLabel(symp);
+        document.getElementById('ow-home-symp-fill').style.width = (symp * 100) + '%';
+
+        // Mind Balance
+        const dcMv = r.cns_baseline || 0;
+        const dcZone = window.OW.classifyDCZone(dcMv);
+        const mbLabel = window.OW.mindBalanceLabel(dcZone.grade);
+        document.getElementById('ow-mind-score').textContent = dcZone.grade;
+        document.getElementById('ow-mind-label').textContent = mbLabel;
+        const mindRing = document.getElementById('ow-mind-ring');
+        const mindColor = dcZone.grade >= 6 ? 'var(--success)' : dcZone.grade >= 4 ? '#d29922' : 'var(--danger)';
+        mindRing.style.borderColor = mindColor;
+        document.getElementById('ow-mind-score').style.color = mindColor;
+
+        // Trainability windows
+        const tw = window.OW.calcTrainabilityWindows(cs, para, dcZone.grade);
+        document.getElementById('ow-train-endurance').style.height = (tw.endurance / 4 * 100) + '%';
+        document.getElementById('ow-train-speed').style.height = (tw.speedPower / 4 * 100) + '%';
+        document.getElementById('ow-train-strength').style.height = (tw.strength / 4 * 100) + '%';
+        document.getElementById('ow-train-coord').style.height = (tw.coordination / 4 * 100) + '%';
+    }
+    // --- Cardiac Detail Screen ---
+    function renderOWCardiacDetail(r, history) {
+        document.getElementById('ow-det-hr').textContent = Math.round(r.mean_hr || 0) + ' bpm';
+
+        const para = r.parasympathetic || 0;
+        const symp = r.sympathetic || 0;
+        const cs = r.cardiac_stress || 4;
+
+        document.getElementById('ow-det-para-val').textContent = (para * 100).toFixed(0) + '%';
+        document.getElementById('ow-det-para-label').textContent = window.OW.parasympatheticLabel(para);
+        document.getElementById('ow-det-para-fill').style.width = (para * 100) + '%';
+
+        document.getElementById('ow-det-symp-val').textContent = (symp * 100).toFixed(0) + '%';
+        document.getElementById('ow-det-symp-label').textContent = window.OW.sympatheticLabel(symp);
+        document.getElementById('ow-det-symp-fill').style.width = (symp * 100) + '%';
+
+        document.getElementById('ow-det-cs-label').textContent = window.OW.cardiacStressLabel(cs);
+        const csBadge = document.getElementById('ow-det-cs-badge');
+        csBadge.textContent = cs;
+        if (cs >= 5) { csBadge.style.background = 'rgba(35,134,54,0.2)'; csBadge.style.color = 'var(--success)'; }
+        else if (cs >= 3) { csBadge.style.background = 'rgba(210,153,34,0.2)'; csBadge.style.color = 'var(--warning)'; }
+        else { csBadge.style.background = 'rgba(255,123,114,0.2)'; csBadge.style.color = 'var(--danger)'; }
+
+        // Time-domain metrics
+        document.getElementById('ow-det-sdnn').textContent = (r.sdnn || 0).toFixed(1) + ' ms';
+        document.getElementById('ow-det-rmssd').textContent = (r.rmssd || 0).toFixed(1) + ' ms';
+        document.getElementById('ow-det-sdsd').textContent = (r.sdsd || r.rmssd || 0).toFixed(1) + ' ms';
+
+        // History chart
+        if (history && history.length > 1) renderCardiacHistoryChart(history);
+    }
+
+    function renderCardiacHistoryChart(data) {
+        const ctx = document.getElementById('ow-cardiac-chart');
+        if (!ctx) return;
+        destroyChartSafe(chartCardiacHistory);
+        const sorted = [...data].sort((a, b) => a.date.localeCompare(b.date));
+        const labels = sorted.map(d => { const dt = new Date(d.date || d.created_at); return dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); });
+        const scores = sorted.map(d => d.cardiac_stress || 4);
+
+        chartCardiacHistory = new Chart(ctx.getContext('2d'), {
+            type: 'line',
+            data: { labels, datasets: [{ data: scores, borderColor: '#00c9b1', backgroundColor: 'rgba(0,201,177,0.1)', fill: true, tension: 0.3, pointRadius: 4, pointBackgroundColor: '#00c9b1' }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { min: 1, max: 7, ticks: { stepSize: 1 } } } }
+        });
+    }
+
+    // --- CNS Detail Screen ---
+    function renderOWCNSDetail(r, history) {
+        const dcMv = r.cns_baseline || 0;
+        const dcZone = window.OW.classifyDCZone(dcMv);
+        document.getElementById('ow-det-dc-mv').textContent = dcMv.toFixed(1) + ' mV';
+
+        const zoneLabel = document.getElementById('ow-det-dc-zone');
+        zoneLabel.textContent = dcZone.label;
+        if (dcZone.grade >= 6) { zoneLabel.style.background = 'rgba(35,134,54,0.15)'; zoneLabel.style.color = 'var(--success)'; }
+        else if (dcZone.grade >= 4) { zoneLabel.style.background = 'rgba(210,153,34,0.15)'; zoneLabel.style.color = 'var(--warning)'; }
+        else { zoneLabel.style.background = 'rgba(255,123,114,0.15)'; zoneLabel.style.color = 'var(--danger)'; }
+
+        // Curve shape
+        const curveShape = r.cns_curve_shape || '--';
+        document.getElementById('ow-det-curve-shape').textContent = curveShape;
+        // Try to get description from classification
+        if (owMeasState.cnsMvSamples && owMeasState.cnsMvSamples.length > 60) {
+            const analysis = window.OW.classifyCurve(owMeasState.cnsMvSamples);
+            document.getElementById('ow-det-curve-desc').textContent = analysis.description;
+        } else {
+            document.getElementById('ow-det-curve-desc').textContent = 'Complete a new measurement to see curve analysis details.';
+        }
+
+        // Key factors
+        if (owMeasState.cnsMvSamples && owMeasState.cnsMvSamples.length > 0) {
+            const mv = owMeasState.cnsMvSamples;
+            const initMv = mv.slice(0, Math.min(90, Math.floor(mv.length / 4)));
+            const stabMv = mv.slice(-Math.min(600, Math.floor(mv.length / 3)));
+            const initMean = initMv.reduce((a, b) => a + b, 0) / initMv.length;
+            const stabMean = stabMv.reduce((a, b) => a + b, 0) / stabMv.length;
+            document.getElementById('ow-det-dc-init').textContent = initMean.toFixed(1) + ' mV';
+            document.getElementById('ow-det-dc-stab').textContent = stabMean.toFixed(1) + ' mV';
+            // Estimate stabilization time (when std dev drops below 3 in 10s windows)
+            let stabTime = Math.round(mv.length / 10);
+            for (let i = 100; i < mv.length - 100; i += 100) {
+                const win = mv.slice(i, i + 100);
+                if (window.OW.stdDev(win) < 3) { stabTime = Math.round(i / 10); break; }
+            }
+            document.getElementById('ow-det-dc-time').textContent = stabTime + ' s';
+
+            // Render curve chart
+            renderDCCurveChart(mv);
+        } else {
+            document.getElementById('ow-det-dc-init').textContent = '-- mV';
+            document.getElementById('ow-det-dc-stab').textContent = '-- mV';
+            document.getElementById('ow-det-dc-time').textContent = '-- s';
+        }
+
+        // History chart
+        if (history && history.length > 1) renderCNSHistoryChart(history);
+    }
+
+    function renderCNSHistoryChart(data) {
+        const ctx = document.getElementById('ow-cns-chart');
+        if (!ctx) return;
+        destroyChartSafe(chartCNSHistory);
+        const sorted = [...data].sort((a, b) => a.date.localeCompare(b.date));
+        const labels = sorted.map(d => { const dt = new Date(d.date || d.created_at); return dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); });
+        const dcZones = sorted.map(d => window.OW.classifyDCZone(d.cns_baseline || 0).grade);
+
+        chartCNSHistory = new Chart(ctx.getContext('2d'), {
+            type: 'line',
+            data: { labels, datasets: [{ data: dcZones, borderColor: '#d29922', backgroundColor: 'rgba(210,153,34,0.1)', fill: true, tension: 0.3, pointRadius: 4, pointBackgroundColor: '#d29922' }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { min: 1, max: 7, ticks: { stepSize: 1 } } } }
+        });
+    }
+
+    function renderDCCurveChart(mvSamples) {
+        const ctx = document.getElementById('ow-dc-curve-chart');
+        if (!ctx) return;
+        destroyChartSafe(chartDCCurve);
+        // Downsample for performance (show every 10th sample)
+        const step = Math.max(1, Math.floor(mvSamples.length / 300));
+        const ds = mvSamples.filter((_, i) => i % step === 0);
+        const labels = ds.map((_, i) => Math.round(i * step / 10) + 's');
+
+        chartDCCurve = new Chart(ctx.getContext('2d'), {
+            type: 'line',
+            data: { labels, datasets: [{ data: ds, borderColor: '#d29922', borderWidth: 1.5, tension: 0.2, pointRadius: 0, fill: false }] },
+            options: {
+                responsive: true, maintainAspectRatio: false, animation: false,
+                plugins: {
+                    legend: { display: false },
+                    annotation: { annotations: {
+                        optZone: { type: 'box', yMin: 20, yMax: 34, backgroundColor: 'rgba(35,134,54,0.08)', borderWidth: 0 }
+                    }}
+                },
+                scales: { x: { display: true, ticks: { maxTicksLimit: 6 } }, y: { title: { display: true, text: 'mV', font: { size: 10 } }, suggestedMin: -5, suggestedMax: 70 } }
+            }
+        });
+    }
+    // --- Measurement Flow ---
+    async function startOmegawaveMeasurement() {
+        try {
+            document.getElementById('btn-ow-connect').textContent = 'Connecting...';
+            document.getElementById('btn-ow-connect').disabled = true;
+
+            window.OW.state.onCNSData = handleOWCNSData;
+            window.OW.state.onECGData = handleOWECGData;
+            window.OW.state.onDisconnect = handleOWDisconnect;
+            window.OW.state.onStatusChange = handleOWStatusChange;
+
+            const deviceName = await window.OW.connectOmegawave();
+
+            owMeasState.cnsSamples = [];
+            owMeasState.cnsMvSamples = [];
+            owMeasState.ecgRawPackets = [];
+            owMeasState.rrIntervals = [];
+            owMeasState.running = true;
+            owMeasState.timeLeft = 180;
+            owMeasState.lastResult = null;
+            cnsChartLabels = [];
+            cnsChartData = [];
+
+            document.getElementById('ow-setup').style.display = 'none';
+            document.getElementById('ow-active').style.display = 'flex';
+
+            const timerRing = document.getElementById('ow-timer-ring');
+            if (timerRing) timerRing.className = 'measure-ring ring-measure';
+            document.getElementById('ow-status-text').textContent = `Connected to ${deviceName}. Measuring...`;
+            updateOWTimerDisplay();
+            initCNSLiveChart();
+
+            owMeasState.timerInterval = setInterval(() => {
+                owMeasState.timeLeft--;
+                updateOWTimerDisplay();
+                if (owMeasState.timeLeft <= 0) finishOmegawaveMeasurement();
+            }, 1000);
+        } catch (error) {
+            console.error('[OW] Connection error:', error);
+            showToast('Omegawave Error: ' + error.message, 'danger');
+            resetOWUI();
+        }
+    }
+
+    function initCNSLiveChart() {
+        const ctx = document.getElementById('cns-live-chart').getContext('2d');
+        destroyChartSafe(chartCNSLive);
+        chartCNSLive = new Chart(ctx, {
+            type: 'line',
+            data: { labels: cnsChartLabels, datasets: [{ data: cnsChartData, borderColor: '#00c9b1', borderWidth: 1.5, tension: 0.2, pointRadius: 0, fill: false }] },
+            options: {
+                responsive: true, maintainAspectRatio: false, animation: false,
+                plugins: { legend: { display: false } },
+                scales: { x: { display: false }, y: { title: { display: true, text: 'mV', font: { size: 10 } }, suggestedMin: -5, suggestedMax: 70, ticks: { maxTicksLimit: 5 } } }
+            }
+        });
+    }
+
+    function handleOWCNSData(samples) {
+        if (!owMeasState.running) return;
+        owMeasState.cnsSamples.push(...samples);
+        for (const s of samples) {
+            const mv = window.OW.adcToMv(s);
+            owMeasState.cnsMvSamples.push(mv);
+            cnsChartLabels.push('');
+            cnsChartData.push(mv);
+        }
+        while (cnsChartLabels.length > CNS_CHART_MAX_POINTS) { cnsChartLabels.shift(); cnsChartData.shift(); }
+        if (chartCNSLive) chartCNSLive.update('none');
+        const latestMv = window.OW.adcToMv(samples[samples.length - 1]);
+        const cnsEl = document.getElementById('ow-live-cns');
+        if (cnsEl) cnsEl.textContent = latestMv.toFixed(1) + ' mV';
+    }
+
+    function handleOWECGData(rawBytes, seqHeader) {
+        if (!owMeasState.running) return;
+        owMeasState.ecgRawPackets.push({ seq: seqHeader, data: rawBytes, ts: Date.now() });
+    }
+
+    function handleOWDisconnect() {
+        if (owMeasState.running) {
+            const banner = document.getElementById('disconn-banner');
+            if (banner) { banner.textContent = 'Omegawave disconnected.'; banner.classList.add('show'); setTimeout(() => banner.classList.remove('show'), 4000); }
+            cancelOmegawaveMeasurement();
+        }
+    }
+
+    function handleOWStatusChange(status) {
+        const statusEl = document.getElementById('ow-status-text');
+        if (!statusEl) return;
+        const map = { 'requesting': 'Searching for OW-CB2...', 'connecting': 'Connecting...', 'discovering': 'Discovering services...', 'subscribing-cns': 'Subscribing to CNS...', 'subscribing-ecg': 'Subscribing to ECG...', 'streaming': 'Streaming data...', 'disconnected': 'Disconnected' };
+        statusEl.textContent = map[status] || status;
+    }
+
+    function updateOWTimerDisplay() {
+        const m = Math.floor(owMeasState.timeLeft / 60).toString().padStart(2, '0');
+        const s = (owMeasState.timeLeft % 60).toString().padStart(2, '0');
+        const el = document.getElementById('ow-live-timer');
+        if (el) el.textContent = `${m}:${s}`;
+    }
+
+    async function cancelOmegawaveMeasurement() {
+        owMeasState.running = false;
+        clearInterval(owMeasState.timerInterval);
+        try { await window.OW.disconnectOmegawave(); } catch(e) { /* ignore */ }
+        resetOWUI();
+    }
+
+    function resetOWUI() {
+        document.getElementById('ow-setup').style.display = 'flex';
+        document.getElementById('ow-active').style.display = 'none';
+        document.getElementById('btn-ow-connect').textContent = 'Connect Omegawave';
+        document.getElementById('btn-ow-connect').disabled = false;
+        document.getElementById('ow-live-hr').textContent = '--';
+        document.getElementById('ow-live-rmssd').textContent = '-- ms';
+        document.getElementById('ow-live-cns').textContent = '-- mV';
+        document.getElementById('ow-live-timer').textContent = '03:00';
+    }
+
+    async function finishOmegawaveMeasurement() {
+        owMeasState.running = false;
+        clearInterval(owMeasState.timerInterval);
+        try { await window.OW.disconnectOmegawave(); } catch(e) { /* ignore */ }
+
+        // --- Full scoring pipeline ---
+        const cnsMedianADC = window.OW.medianOfArray(owMeasState.cnsSamples);
+        const cnsMv = window.OW.adcToMv(cnsMedianADC);
+        const dcZone = window.OW.classifyDCZone(cnsMv);
+        const curveAnalysis = window.OW.classifyCurve(owMeasState.cnsMvSamples);
+
+        let rmssd = 0, sdnn = 0, meanHR = 0, stressIdx = 0, readinessScore = 50;
+
+        if (owMeasState.rrIntervals.length >= 10) {
+            const { filterRR, computeHRV, calcReadiness } = await hrvModulePromise;
+            const cleanRR = filterRR(owMeasState.rrIntervals);
+            if (cleanRR.length >= 10) {
+                const hrv = computeHRV(cleanRR);
+                rmssd = hrv.rmssd; sdnn = hrv.sdnn; meanHR = hrv.meanHR; stressIdx = hrv.stressIndex || 0;
+                readinessScore = calcReadiness(rmssd, appState.measurements);
+            }
+        } else {
+            const normalizedCNS = Math.max(0, Math.min(100, ((cnsMedianADC - 300) / 300) * 100));
+            readinessScore = Math.round(normalizedCNS);
+            const latestMeas = appState.measurements[appState.measurements.length - 1];
+            if (latestMeas) { rmssd = latestMeas.rmssd || 0; sdnn = latestMeas.sdnn || 0; meanHR = latestMeas.meanHR || 0; stressIdx = latestMeas.stressIndex || 0; }
+        }
+
+        const para = window.OW.calcParasympathetic(rmssd, stressIdx);
+        const symp = window.OW.calcSympathetic(stressIdx);
+        const cardStress = window.OW.calcCardiacStress(stressIdx);
+        const sr = window.OW.toStressResilience(readinessScore);
+
+        owMeasState.lastResult = {
+            date: new Date().toISOString().split('T')[0],
+            rmssd: Math.round(rmssd * 100) / 100,
+            sdnn: Math.round(sdnn * 100) / 100,
+            sdsd: Math.round(rmssd * 100) / 100,
+            mean_hr: Math.round(meanHR * 100) / 100,
+            stress_index: Math.round(stressIdx * 100) / 100,
+            parasympathetic: Math.round(para * 1000) / 1000,
+            sympathetic: Math.round(symp * 1000) / 1000,
+            cardiac_stress: cardStress,
+            cns_baseline: Math.round(cnsMv * 100) / 100,
+            cns_curve_shape: curveAnalysis.shape,
+            readiness_score: readinessScore,
+            stress_resilience: sr,
+            duration_seconds: 180
+        };
+
+        console.log(`[OW] Measurement complete. CNS: ${owMeasState.cnsSamples.length} samples, ECG: ${owMeasState.ecgRawPackets.length} packets`);
+        console.log('[OW] Result:', owMeasState.lastResult);
+
+        // Auto-save and show home
+        await saveReadinessResult();
+    }
+
+    async function saveReadinessResult() {
+        if (!owMeasState.lastResult || !currentUser) {
+            if (!currentUser) showToast('Please sign in to save results.', 'warning');
+            return;
+        }
+        const r = owMeasState.lastResult;
+        setSyncStatus('syncing', 'Saving...');
+        try {
+            const { error } = await sbClient.from('readiness_results').insert({
+                user_id: currentUser.id,
+                date: r.date, rmssd: r.rmssd, sdnn: r.sdnn, sdsd: r.sdsd,
+                mean_hr: r.mean_hr, stress_index: r.stress_index,
+                parasympathetic: r.parasympathetic, sympathetic: r.sympathetic,
+                cardiac_stress: r.cardiac_stress, cns_baseline: r.cns_baseline,
+                cns_curve_shape: r.cns_curve_shape, readiness_score: r.readiness_score,
+                stress_resilience: r.stress_resilience, duration_seconds: r.duration_seconds
+            });
+            if (error) throw error;
+            setSyncStatus('synced', 'Synced');
+            showToast('Readiness result saved!', 'success');
+            resetOWUI();
+            await loadAndRenderReadinessHome();
+            showOWScreen('ow-home');
+        } catch (e) {
+            console.error('[Readiness] Save error:', e);
+            setSyncStatus('error', 'Sync error');
+            showToast('Failed to save: ' + e.message, 'danger');
+        }
+    }
+
+    // Expose to global scope
+    window.startOmegawaveMeasurement = startOmegawaveMeasurement;
+    window.cancelOmegawaveMeasurement = cancelOmegawaveMeasurement;
+    window.saveReadinessResult = saveReadinessResult;
+    window.renderReadinessTab = renderReadinessTab;

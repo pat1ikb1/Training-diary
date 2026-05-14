@@ -562,3 +562,105 @@
             width: 100%;
           }
         }
+
+        /* ===== Readiness (Omegawave) ===== */
+
+        /* Sub-screen management */
+        .ow-screen { display: none; flex-direction: column; gap: 16px; }
+        .ow-screen.active { display: flex; }
+
+        /* Greeting */
+        .ow-greeting-card { padding: 20px; }
+        .ow-greeting-card h3 { font-size: 1.3rem; margin-bottom: 4px; }
+        .ow-subtitle { color: var(--text-muted); font-size: 0.9rem; }
+
+        /* Card header with title + info button */
+        .ow-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .ow-card-title { font-size: 0.9rem; font-weight: 600; }
+        .ow-info-btn { background: none; border: 1px solid var(--border); border-radius: 50%; width: 26px; height: 26px; font-size: 0.75rem; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .ow-info-btn:hover { color: var(--accent); border-color: var(--accent); }
+        .ow-info-btn-sm { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.7rem; padding: 0; }
+        .ow-info-btn-sm:hover { color: var(--accent); }
+
+        /* Arc gauge */
+        .ow-arc-gauge { max-width: 260px; margin: 0 auto; }
+        .ow-arc-gauge svg { width: 100%; }
+
+        /* Score cards (Heart/Mind Balance) */
+        .ow-score-card { text-align: center; padding: 24px 20px; cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease; }
+        .ow-score-card:hover { transform: translateY(-2px); box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+        .ow-score-card h4 { margin: 10px 0 4px; font-size: 1.1rem; }
+
+        /* Score ring (inside cards) */
+        .ow-score-ring { width: 80px; height: 80px; border-radius: 50%; margin: 0 auto; display: flex; align-items: center; justify-content: center; border: 5px solid var(--accent); }
+        .ow-score-ring strong { font-size: 1.8rem; font-weight: 600; color: var(--accent); }
+        .ow-score-ring.status-mind { border-color: #d29922; }
+        .ow-score-ring.status-mind strong { color: #d29922; }
+
+        /* Score label */
+        .ow-score-label { font-size: 0.85rem; font-weight: 500; color: var(--accent); display: block; margin-bottom: 8px; }
+        .ow-card-desc { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px; }
+        .ow-drill-link { font-size: 0.8rem; color: var(--accent); text-decoration: underline; display: block; margin-top: 8px; }
+
+        /* Card preview (para/symp bars in Home) */
+        .ow-card-preview { width: 100%; margin-top: 12px; text-align: left; }
+
+        /* Index rows */
+        .ow-index-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+        .ow-index-name { font-size: 0.8rem; color: var(--text); min-width: 100px; }
+        .ow-index-label { font-size: 0.75rem; font-weight: 600; color: var(--accent); }
+        .ow-index-val { font-size: 0.9rem; font-weight: 600; color: var(--text); }
+
+        /* Index bar */
+        .ow-index-bar { height: 6px; background: var(--border); border-radius: 3px; flex: 1; min-width: 80px; position: relative; }
+        .ow-index-fill { height: 100%; border-radius: 3px; background: var(--accent); transition: width 0.4s ease; position: relative; }
+        .ow-index-fill::after { content: ''; position: absolute; right: -4px; top: -3px; width: 12px; height: 12px; border-radius: 50%; background: var(--accent); border: 2px solid var(--card); }
+        .ow-index-fill.symp { background: #58a6ff; }
+        .ow-index-fill.symp::after { background: #58a6ff; }
+
+        /* Trainability bars */
+        .ow-train-grid { display: flex; justify-content: space-around; align-items: flex-end; gap: 16px; padding: 0 10px; }
+        .ow-train-col { display: flex; flex-direction: column; align-items: center; gap: 8px; flex: 1; }
+        .ow-train-bar-track { width: 28px; height: 100px; background: var(--border); border-radius: 14px; position: relative; overflow: hidden; display: flex; align-items: flex-end; }
+        .ow-train-bar-fill { width: 100%; background: linear-gradient(to top, #d29922, #e8b849); border-radius: 14px; transition: height 0.5s ease; }
+        .ow-train-label { font-size: 0.7rem; color: var(--text-muted); text-align: center; line-height: 1.2; }
+        .ow-train-scale { display: flex; justify-content: space-around; padding: 8px 10px 0; }
+        .ow-train-scale span { font-size: 0.7rem; color: var(--text-muted); }
+
+        /* Metric rows */
+        .ow-metric-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
+        .ow-metric-row:last-child { border-bottom: none; }
+        .ow-metric-row span { font-size: 0.85rem; }
+        .ow-metric-row strong { font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+
+        /* Cardiac stress badge */
+        .ow-cs-badge { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; background: rgba(35, 134, 54, 0.2); color: var(--success); font-weight: 700; font-size: 0.95rem; }
+
+        /* DC zone label */
+        .ow-dc-zone-label { font-size: 0.85rem; font-weight: 500; padding: 4px 10px; border-radius: 6px; background: rgba(0, 201, 177, 0.15); color: var(--accent); }
+
+        /* Back button */
+        .ow-back-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.9rem; padding: 4px 0; text-align: left; margin-bottom: 4px; }
+        .ow-back-btn:hover { color: var(--accent); }
+
+        /* Active measurement panel */
+        .ow-active-panel { display: none; flex-direction: column; align-items: center; gap: 20px; flex: 1; justify-content: center; }
+
+        /* CNS chart container */
+        .cns-chart-container { position: relative; height: 150px; width: 100%; }
+
+        /* Metric cards (live measurement) */
+        .ow-metric-card { text-align: center; }
+        .ow-metric-card strong { font-variant-numeric: tabular-nums; }
+
+        /* Info bottom-sheet modal */
+        .ow-info-modal { display: none; position: fixed; inset: 0; z-index: 2000; background: rgba(0,0,0,0.5); align-items: flex-end; justify-content: center; }
+        .ow-info-modal.active { display: flex; }
+        .ow-info-content { background: var(--card); border-radius: 16px 16px 0 0; padding: 24px; max-width: 500px; width: 100%; max-height: 60vh; overflow-y: auto; animation: ow-slide-up 0.25s ease-out; }
+        .ow-info-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .ow-info-header h4 { font-size: 1rem; }
+        .ow-info-close { background: none; border: none; color: var(--text-muted); font-size: 1.2rem; cursor: pointer; padding: 4px 8px; }
+        .ow-info-close:hover { color: var(--text); }
+        #ow-info-text { font-size: 0.9rem; color: var(--text-muted); line-height: 1.5; }
+        @keyframes ow-slide-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
